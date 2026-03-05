@@ -257,7 +257,7 @@ function renderAll() { renderHUD(); renderDesc(); renderActions(); renderLogs();
 
 function renderHUD() {
   hudPanel.innerHTML=""; const run=state.run;
-  if(!run){addChip(hudPanel,"준비","새 런 시작");return;}
+  if(!run){return;}
   addChip(hudPanel,"층",`${run.floor}/5`); addChip(hudPanel,"골드",`${run.gold}`);
   addChip(hudPanel,"귀속",`${run.consumedFoodCount}`);
   if(run.attackBonus)addChip(hudPanel,"공보",`+${run.attackBonus}`);
@@ -284,7 +284,7 @@ function renderDesc() {
   let msg="";
   if(state.phase===PHASE.COMBAT&&state.discarding&&state.actingMember) msg=`${state.actingMember.name}: 손패 초과! 카드를 버려주세요`;
   else if(state.phase===PHASE.COMBAT&&state.waitingForAlly&&state.actingMember) msg=`${state.actingMember.name}의 차례 (SPD ${state.actingMember.speed}) — 카드 ${DRAW_PER_CHAR}장 드로우 │ 공격: 적에게 드래그 / 방어·버프: 클릭`;
-  else if(state.phase===PHASE.TITLE) msg="지옥의 음식을 먹으면 강해지지만, 탈출 자격을 잃는다.";
+  else if(state.phase===PHASE.TITLE||state.phase==="SETTINGS") msg="";
   else if(state.phase===PHASE.MAP) msg="인접 노드 선택";
   else msg="";
   descriptionPanel.textContent=msg; overlayHint.textContent="";
