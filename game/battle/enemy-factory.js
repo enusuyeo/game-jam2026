@@ -1,9 +1,9 @@
 /**
- * 적 생성 팩토리.
+ * Enemy factory.
  */
 
-const ENEMY_NAMES = ["하층 감시자", "봉인 수졸", "균열 정찰병", "망각 파수꾼", "심연 보행자", "폐허 방랑자"];
-export const BOSS_NAMES = ["철쇄 간수", "균열 수호자", "기억 집행관", "심판 사서", "타르타로스의 문지기"];
+const ENEMY_NAMES = ["Lower Warden", "Seal Guard", "Rift Scout", "Forgetful Sentinel", "Abyss Walker", "Ruin Drifter"];
+export const BOSS_NAMES = ["Chain Jailer", "Rift Guardian", "Memory Executor", "Judgment Archivist", "Gatekeeper of Tartaros"];
 const SUFFIXES = ["α", "β", "γ"];
 
 function randomInt(min, max) {
