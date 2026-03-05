@@ -347,7 +347,7 @@ function renderActions() {
     ["SETTINGS"]:()=>{head.textContent="";renderSettingsPanel(row);},
     [PHASE.MAP]:()=>{head.textContent="Map";renderMapAct(row);},
     [PHASE.COMBAT]:()=>{head.textContent=state.discarding?"Discard Cards":state.waitingForAlly?"Select Card":"Combat";renderCombatAct(row);},
-    [PHASE.EVENT]:()=>{head.textContent="Choice";renderEventAct(row);},
+    [PHASE.EVENT]:()=>{head.textContent="";renderEventAct(row);},
     [PHASE.BATTLE_REWARD]:()=>{head.textContent="Reward";renderRewardAct(row);},
     [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="Select Character";renderAssignAct(row);},
     [PHASE.FLOOR_REWARD]:()=>{head.textContent="Floor Reward";renderFloorAct(row);},
