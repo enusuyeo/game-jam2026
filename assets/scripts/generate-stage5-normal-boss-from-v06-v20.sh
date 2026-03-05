@@ -2,15 +2,26 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-REF="$ROOT_DIR/assets/ui/pixel/special-bgs-2026-03-05/boss-like-normal-v04/bg-05-boss-like-normal-v04-v06.png"
+REF=""
+for candidate in \
+  "$ROOT_DIR/assets/ui/pixel/special-bgs-2026-03-05/boss-like-normal-v04/bg-05-boss-like-normal-v04-v06.png" \
+  "$ROOT_DIR/assets/ui/pixel/background/bg-05-boss-wall.png" \
+  "$ROOT_DIR/assets/ui/pixel/ending/bg-05-normal-wall-v04.png"
+do
+  if [[ -f "$candidate" ]]; then
+    REF="$candidate"
+    break
+  fi
+done
 OUT_DIR="$ROOT_DIR/assets/ui/pixel/special-bgs-2026-03-05/stage5-normal-boss-from-v06"
 TMP_DIR="$OUT_DIR/.tmp"
 mkdir -p "$OUT_DIR" "$TMP_DIR"
 
-if [[ ! -f "$REF" ]]; then
-  echo "reference not found: $REF" >&2
+if [[ -z "$REF" || ! -f "$REF" ]]; then
+  echo "reference not found: preferred stage5 references" >&2
   exit 1
 fi
+echo "using reference: $REF"
 
 normalize_to_16_9_1920x1080() {
   local in="$1"

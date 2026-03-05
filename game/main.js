@@ -63,18 +63,18 @@ const bgGameStart = loadImg("bg_gamestart.png");
 const bgMap = loadImg("map_bg.png");
 
 const bgFloorNormal = {
-  1: loadImg("bg-01-prison-blue-wall.png"),
-  2: loadImg("bg-02-fractured-vault-wall.png"),
-  3: loadImg("bg-03-memory-mural-wall.png"),
+  1: loadImg("bg-01-normal-wall.png"),
+  2: loadImg("bg-02-normal-wall.png"),
+  3: loadImg("bg-03-normal-wall.png"),
   4: loadImg("bg-04-cursed-archive-wall.png"),
-  5: loadImg("bg-04-cursed-archive-wall.png"),
+  5: loadImg("bg-05-normal-wall.png"),
 };
 const bgFloorBoss = {
   1: loadImg("bg-01-boss-wall.png"),
   2: loadImg("bg-02-boss-wall.png"),
   3: loadImg("bg-03-boss-wall.png"),
-  4: loadImg("bg-03-boss-wall.png"),
-  5: loadImg("bg-03-boss-wall.png"),
+  4: loadImg("bg-04-boss-wall.png"),
+  5: loadImg("bg-05-boss-wall.png"),
 };
 const bgEvent = [
   loadImg("bg-06-catacomb-wall.png"),
@@ -163,11 +163,12 @@ function triggerDrawAnim(cardIds) {
   overlay.className = "card-draw-overlay";
   viewport.appendChild(overlay);
 
-  const STAGGER = 800;
-  const BACK_SHOW = 600;
-  const FLIP_DUR = 400;
-  const FRONT_SHOW = 1200;
-  const FADE_DUR = 500;
+  const spd = gameSettings.drawSpeed || 1.0;
+  const STAGGER = Math.round(800 / spd);
+  const BACK_SHOW = Math.round(600 / spd);
+  const FLIP_DUR = Math.round(400 / spd);
+  const FRONT_SHOW = Math.round(1200 / spd);
+  const FADE_DUR = Math.round(500 / spd);
 
   cardIds.forEach((cid, i) => {
     const card = CARD_LIBRARY[cid];
@@ -256,7 +257,7 @@ function renderAll() { renderHUD(); renderDesc(); renderActions(); renderLogs();
 
 function renderHUD() {
   hudPanel.innerHTML=""; const run=state.run;
-  if(!run){addChip(hudPanel,"준비","새 런 시작");return;}
+  if(!run){return;}
   addChip(hudPanel,"층",`${run.floor}/5`); addChip(hudPanel,"골드",`${run.gold}`);
   addChip(hudPanel,"귀속",`${run.consumedFoodCount}`);
   if(run.attackBonus)addChip(hudPanel,"공보",`+${run.attackBonus}`);
@@ -283,7 +284,7 @@ function renderDesc() {
   let msg="";
   if(state.phase===PHASE.COMBAT&&state.discarding&&state.actingMember) msg=`${state.actingMember.name}: 손패 초과! 카드를 버려주세요`;
   else if(state.phase===PHASE.COMBAT&&state.waitingForAlly&&state.actingMember) msg=`${state.actingMember.name}의 차례 (SPD ${state.actingMember.speed}) — 카드 ${DRAW_PER_CHAR}장 드로우 │ 공격: 적에게 드래그 / 방어·버프: 클릭`;
-  else if(state.phase===PHASE.TITLE) msg="지옥의 음식을 먹으면 강해지지만, 탈출 자격을 잃는다.";
+  else if(state.phase===PHASE.TITLE||state.phase==="SETTINGS") msg="";
   else if(state.phase===PHASE.MAP) msg="인접 노드 선택";
   else msg="";
   descriptionPanel.textContent=msg; overlayHint.textContent="";
@@ -293,7 +294,8 @@ function renderActions() {
   actionsPanel.innerHTML="";
   const head=document.createElement("h3"), row=document.createElement("div"); row.className="action-row";
   const H={
-    [PHASE.TITLE]:()=>{head.textContent="시작";row.appendChild(btn("새 런 시작","primary",startNewRun));},
+    [PHASE.TITLE]:()=>{head.textContent="";renderTitleButtons(row);},
+    ["SETTINGS"]:()=>{head.textContent="";renderSettingsPanel(row);},
     [PHASE.MAP]:()=>{head.textContent="맵";renderMapAct(row);},
     [PHASE.COMBAT]:()=>{head.textContent=state.discarding?"카드 버리기":state.waitingForAlly?"카드 선택":"전투 진행";renderCombatAct(row);},
     [PHASE.EVENT]:()=>{head.textContent="선택지";renderEventAct(row);},
@@ -307,6 +309,67 @@ function renderActions() {
   };
   const h=H[state.phase]; if(h)h();
   actionsPanel.appendChild(head); actionsPanel.appendChild(row);
+}
+
+function imgBtn(src, onClick) {
+  const b = document.createElement("button");
+  b.className = "img-btn";
+  b.innerHTML = `<img src="${src}" alt="" />`;
+  b.onclick = onClick;
+  return b;
+}
+
+const gameSettings = { musicVol: 0.7, drawSpeed: 1.0 };
+
+function renderTitleButtons(c) {
+  const BTN = "../assets/ui/pixel/buttons/";
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:4px;";
+  const startBtn = imgBtn(BTN + "start.png", startNewRun);
+  startBtn.querySelector("img").style.cssText = "height:auto;width:150px;";
+  wrap.appendChild(startBtn);
+  const setBtn = imgBtn(BTN + "setting.png", openSettings);
+  setBtn.querySelector("img").style.cssText = "height:auto;width:150px;";
+  wrap.appendChild(setBtn);
+  c.appendChild(wrap);
+}
+
+function openSettings() {
+  state.phase = "SETTINGS";
+  renderAll();
+}
+
+function renderSettingsPanel(c) {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px;";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:16px;font-weight:700;color:#f6d18d;text-align:center;";
+  title.textContent = "설정";
+  wrap.appendChild(title);
+
+  wrap.appendChild(makeSlider("음악 볼륨", gameSettings.musicVol, v => { gameSettings.musicVol = v; }));
+  wrap.appendChild(makeSlider("카드 뽑기 속도", gameSettings.drawSpeed, v => { gameSettings.drawSpeed = v; }, 0.5, 2.0, 0.1));
+
+  c.appendChild(wrap);
+  c.appendChild(btn("돌아가기", "primary", () => { state.phase = PHASE.TITLE; renderAll(); }));
+}
+
+function makeSlider(label, val, onChange, min=0, max=1, step=0.05) {
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;align-items:center;gap:8px;";
+  const lbl = document.createElement("span");
+  lbl.style.cssText = "font-size:12px;color:#d0dae8;min-width:90px;";
+  lbl.textContent = label;
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+  inp.style.cssText = "flex:1;accent-color:#f6d18d;";
+  const num = document.createElement("span");
+  num.style.cssText = "font-size:11px;color:#8a9bb0;min-width:30px;text-align:right;";
+  num.textContent = Math.round(val * 100) + "%";
+  inp.oninput = () => { onChange(parseFloat(inp.value)); num.textContent = Math.round(inp.value * 100) + "%"; };
+  row.appendChild(lbl); row.appendChild(inp); row.appendChild(num);
+  return row;
 }
 
 function renderMapAct(c) {
@@ -720,15 +783,14 @@ function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;st
    Canvas Drawing — 960×540 (16:9)
    ══════════════════════════════════════════════════ */
 
-function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
+function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,["SETTINGS"]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
 function drawGrid(){ctx.save();ctx.strokeStyle="rgba(255,255,255,0.04)";ctx.lineWidth=1;for(let x=0;x<960;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,540);ctx.stroke();}for(let y=0;y<540;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(960,y);ctx.stroke();}ctx.restore();}
 const titleLogo = new Image();
 titleLogo.src = "../assets/ui/pixel/titles/title-faded-dungen-v10.png";
 
-const SPECIAL_PATH = "../assets/ui/pixel/special-bgs-2026-03-05/";
-const bgEndTrue = new Image(); bgEndTrue.src = SPECIAL_PATH + "bg-ending-true.png";
-const bgEndFail = new Image(); bgEndFail.src = SPECIAL_PATH + "bg-ending-fail.png";
-const bgEndStress = new Image(); bgEndStress.src = SPECIAL_PATH + "bg-ending-stress.png";
+const bgEndTrue = loadImg("../ending/bg-ending-true.png");
+const bgEndFail = loadImg("../ending/bg-ending-fail.png");
+const bgEndStress = loadImg("../ending/bg-ending-stress.png");
 function drawTitle(){
   drawBg(bgGameStart);
   if(titleLogo.complete&&titleLogo.naturalWidth>0){
