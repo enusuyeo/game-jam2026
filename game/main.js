@@ -163,31 +163,41 @@ function triggerDrawAnim(cardIds) {
   overlay.className = "card-draw-overlay";
   viewport.appendChild(overlay);
 
+  const STAGGER = 800;
+  const BACK_SHOW = 600;
+  const FLIP_DUR = 400;
+  const FRONT_SHOW = 1200;
+  const FADE_DUR = 500;
+
   cardIds.forEach((cid, i) => {
     const card = CARD_LIBRARY[cid];
-    const backEl = document.createElement("div");
-    backEl.className = "card-draw-item back";
-    backEl.style.animationDelay = `${i * 200}ms`;
-    overlay.appendChild(backEl);
+    const delay = i * STAGGER;
 
     setTimeout(() => {
-      backEl.style.animation = "cardFadeOut 0.2s ease-in forwards";
-      setTimeout(() => {
-        backEl.remove();
-        const frontEl = document.createElement("div");
-        frontEl.className = "card-draw-item front";
-        frontEl.innerHTML = `<div class="draw-name">${card.name}</div><div class="draw-text">${card.text}</div>`;
-        overlay.appendChild(frontEl);
+      const backEl = document.createElement("div");
+      backEl.className = "card-draw-item back";
+      overlay.appendChild(backEl);
 
+      setTimeout(() => {
+        backEl.style.animation = `cardFadeOut ${FLIP_DUR}ms ease-in forwards`;
         setTimeout(() => {
-          frontEl.style.animation = "cardFadeOut 0.3s ease-in forwards";
-          setTimeout(() => frontEl.remove(), 300);
-        }, 600);
-      }, 200);
-    }, 300 + i * 200);
+          backEl.remove();
+          const frontEl = document.createElement("div");
+          frontEl.className = "card-draw-item front";
+          frontEl.innerHTML = `<div class="draw-name">${card.name}</div><div class="draw-text">${card.text}</div>`;
+          overlay.appendChild(frontEl);
+
+          setTimeout(() => {
+            frontEl.style.animation = `cardFadeOut ${FADE_DUR}ms ease-in forwards`;
+            setTimeout(() => frontEl.remove(), FADE_DUR);
+          }, FRONT_SHOW);
+        }, FLIP_DUR);
+      }, BACK_SHOW);
+    }, delay);
   });
 
-  setTimeout(() => overlay.remove(), 400 + cardIds.length * 200 + 900);
+  const totalTime = cardIds.length * STAGGER + BACK_SHOW + FLIP_DUR + FRONT_SHOW + FADE_DUR + 200;
+  setTimeout(() => overlay.remove(), totalTime);
 }
 function makeEffectCtx(s,cb) { return { state:s,combat:cb, aliveParty:()=>aliveParty(s), aliveEnemyList:()=>aliveEnemyList(cb), dmgEnemy:(ti,raw)=>dmgEnemyFn(cb,s,ti,raw), drawCards:n=>drawCardsFromPile(cb,n), log:m=>logLine(s,m) }; }
 
@@ -712,7 +722,13 @@ function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;st
 
 function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
 function drawGrid(){ctx.save();ctx.strokeStyle="rgba(255,255,255,0.04)";ctx.lineWidth=1;for(let x=0;x<960;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,540);ctx.stroke();}for(let y=0;y<540;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(960,y);ctx.stroke();}ctx.restore();}
-const titleLogo = loadImg("../titles/faded-dungen/title-faded-dungen-v10.png");
+const titleLogo = new Image();
+titleLogo.src = "../assets/ui/pixel/titles/title-faded-dungen-v10.png";
+
+const SPECIAL_PATH = "../assets/ui/pixel/special-bgs-2026-03-05/";
+const bgEndTrue = new Image(); bgEndTrue.src = SPECIAL_PATH + "bg-ending-true.png";
+const bgEndFail = new Image(); bgEndFail.src = SPECIAL_PATH + "bg-ending-fail.png";
+const bgEndStress = new Image(); bgEndStress.src = SPECIAL_PATH + "bg-ending-stress.png";
 function drawTitle(){
   drawBg(bgGameStart);
   if(titleLogo.complete&&titleLogo.naturalWidth>0){
@@ -827,7 +843,20 @@ function drawCombat(){
 function drawEvent(){if(!state.eventContext)return;const evIdx=EVENT_VARIANTS.indexOf(state.eventContext.variant);drawBg(bgEvent[evIdx>=0?evIdx%bgEvent.length:0]);const v=state.eventContext.variant;drawPanel(180,120,600,200,"rgba(14,29,33,0.75)");drawText(v.title,210,170,30,"#89f6d9","left");drawText(v.text,210,220,18,"#e0f0ff","left");}
 function drawFloorRw(){drawBg(bgFloorBoss[state.run?.floor]||bgFloorBoss[1]);drawPanel(220,140,520,200,"rgba(39,28,12,0.76)");drawText(`${state.run.floor}층 클리어`,480,200,34,"#f6cd89","center");drawText("보상 선택",480,260,18,"#e8e0d0","center");}
 function drawCutscene(){const sc=state.activeScene;if(!sc)return;const fr=sc.frames[Math.min(state.activeSceneIndex,sc.frames.length-1)];const[r,g2,b]=fr.color;ctx.fillStyle=`rgba(${r},${g2},${b},0.3)`;ctx.fillRect(0,0,960,540);drawPanel(80,100,800,180,"rgba(0,0,0,0.5)");drawPanel(80,310,800,120,"rgba(0,0,0,0.6)");drawText(sc.title,110,150,28,"#f8eac1","left");drawText(fr.headline,110,200,22,"#ffffff","left");drawText(fr.line,110,370,20,"#f4f7fb","left");}
-function drawEnding(){const et=evalEnd(state.run.floor>=5&&aliveParty(state).length>0);const t=et==="ENDING_TRUE"?"진엔딩":et==="ENDING_LOOP"?"일반 엔딩":"실패 엔딩";const tc=et==="ENDING_TRUE"?"#50c878":et==="ENDING_LOOP"?"#f6d18d":"#ff6b6b";drawPanel(200,80,560,380,"rgba(10,14,25,0.78)");drawText(t,480,140,36,tc,"center");drawText(`귀속: ${state.run.consumedFoodCount}`,480,210,20,"#e0e8f0","center");drawText(`골드: ${state.run.gold}`,480,245,20,"#e0e8f0","center");let y=300;state.run.party.forEach(m=>{const st=isActive(m)?"활성":m.stress>STRESS_LIMIT?"붕괴":"사망";drawText(`${m.name}: HP ${m.hp}/${m.maxHp} ST ${m.stress} [${st}]`,480,y,13,isActive(m)?"#88ccaa":"#cc6666","center");y+=20;});}
+function drawEnding(){
+  const et=evalEnd(state.run.floor>=5&&aliveParty(state).length>0);
+  if(et==="ENDING_TRUE") drawBg(bgEndTrue);
+  else if(state.run.collapsedNames.length>0) drawBg(bgEndStress);
+  else drawBg(bgEndFail);
+  const t=et==="ENDING_TRUE"?"진엔딩":et==="ENDING_LOOP"?"일반 엔딩":"실패 엔딩";
+  const tc=et==="ENDING_TRUE"?"#50c878":et==="ENDING_LOOP"?"#f6d18d":"#ff6b6b";
+  drawPanel(200,80,560,380,"rgba(10,14,25,0.65)");
+  drawText(t,480,140,36,tc,"center");
+  drawText(`귀속: ${state.run.consumedFoodCount}`,480,210,20,"#e0e8f0","center");
+  drawText(`골드: ${state.run.gold}`,480,245,20,"#e0e8f0","center");
+  let y=300;state.run.party.forEach(m=>{const st=isActive(m)?"활성":m.stress>STRESS_LIMIT?"붕괴":"사망";
+    drawText(`${m.name}: HP ${m.hp}/${m.maxHp} ST ${m.stress} [${st}]`,480,y,13,isActive(m)?"#88ccaa":"#cc6666","center");y+=20;});
+}
 
 /* ── Draw primitives ─────────────────────────── */
 function drawText(t,x,y,s,c,a="left"){ctx.fillStyle=c;ctx.font=`${s}px Pretendard,Apple SD Gothic Neo,sans-serif`;ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y);}
