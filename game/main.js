@@ -51,12 +51,48 @@ function isEventSeen(optionId) { return loadEventMemory().has(optionId); }
 
 const CUTSCENES = buildCutscenes();
 
-const combatBg = new Image();
-combatBg.src = "../assets/ui/pixel/background/basic_background.png";
 const cardFrontImg = new Image();
 cardFrontImg.src = "../assets/ui/pixel/deck_ui/card_front.png";
 const cardBackImg = new Image();
 cardBackImg.src = "../assets/ui/pixel/deck_ui/card_back.png";
+
+const BG_PATH = "../assets/ui/pixel/background/";
+function loadImg(name) { const img = new Image(); img.src = BG_PATH + name; return img; }
+
+const bgGameStart = loadImg("bg_gamestart.png");
+const bgMap = loadImg("map_bg.png");
+
+const bgFloorNormal = {
+  1: loadImg("bg-01-prison-blue-wall.png"),
+  2: loadImg("bg-02-fractured-vault-wall.png"),
+  3: loadImg("bg-03-memory-mural-wall.png"),
+  4: loadImg("bg-04-cursed-archive-wall.png"),
+  5: loadImg("bg-04-cursed-archive-wall.png"),
+};
+const bgFloorBoss = {
+  1: loadImg("bg-01-boss-wall.png"),
+  2: loadImg("bg-02-boss-wall.png"),
+  3: loadImg("bg-03-boss-wall.png"),
+  4: loadImg("bg-03-boss-wall.png"),
+  5: loadImg("bg-03-boss-wall.png"),
+};
+const bgEvent = [
+  loadImg("bg-06-catacomb-wall.png"),
+  loadImg("bg-06-prison-chapel-wall.png"),
+  loadImg("bg-06-shadow-market-wall.png"),
+];
+
+function drawBg(img) {
+  if (img.complete && img.naturalWidth > 0) ctx.drawImage(img, 0, 0, 960, 540);
+  else { ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(0, 0, 960, 540); }
+}
+
+function getCombatBg() {
+  if (!state.combat) return bgFloorNormal[1];
+  return state.combat.isBoss
+    ? (bgFloorBoss[state.run.floor] || bgFloorBoss[3])
+    : (bgFloorNormal[state.run.floor] || bgFloorNormal[1]);
+}
 
 /* ── DOM ─────────────────────────────────────── */
 const hudPanel = document.getElementById("hudPanel");
@@ -398,7 +434,7 @@ function renderAssignAct(c) { const cid=state.pendingRewardCard;if(!cid)return;c
 function renderFloorAct(c) { c.appendChild(btn("카드 제거","good",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));c.appendChild(btn("공격 +1","",()=>{state.run.attackBonus+=1;logLine(state,"공격+1");proceedFloor();}));c.appendChild(btn("휴식: HP+12, 스트레스-15","",()=>{aliveParty(state).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+12);reduceStress(m,15)});logLine(state,"휴식.");proceedFloor();}));}
 function renderFloorPickAct(c) { const ms=aliveParty(state).filter(m=>m.deck.length>0);if(!ms.length){logLine(state,"카드 없음.");proceedFloor();return;}ms.forEach(m=>c.appendChild(btn(`${m.name} (덱 ${m.deck.length})`,"",()=>{state.removeMember=m;state.phase=PHASE.FLOOR_REWARD_REMOVE;renderAll();})));c.appendChild(btn("취소","",()=>{state.phase=PHASE.FLOOR_REWARD;renderAll();}));}
 function renderFloorRemoveAct(c) { const m=state.removeMember;if(!m)return;[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"ko")).forEach(cid=>{const cnt=m.deck.filter(x=>x===cid).length;c.appendChild(btn(`${CARD_LIBRARY[cid].name} x${cnt}`,"danger",()=>{const idx=m.deck.indexOf(cid);if(idx>=0)m.deck.splice(idx,1);logLine(state,`${m.name}: 제거.`);proceedFloor();}));});c.appendChild(btn("취소","",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));}
-function renderLogs() { logPanel.innerHTML="";state.logs.slice(-12).forEach(e=>{const d=document.createElement("div");d.className="log-entry";d.textContent=e;logPanel.appendChild(d);});logPanel.scrollTop=logPanel.scrollHeight;}
+function renderLogs() { logPanel.innerHTML=""; }
 function btn(l,cls,fn,dis=false){const b=document.createElement("button");b.innerHTML=l;if(cls)b.classList.add(cls);b.disabled=dis;b.onclick=fn;return b;}
 
 /* ── Game Logic ──────────────────────────────── */
@@ -676,10 +712,18 @@ function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;st
 
 function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
 function drawGrid(){ctx.save();ctx.strokeStyle="rgba(255,255,255,0.04)";ctx.lineWidth=1;for(let x=0;x<960;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,540);ctx.stroke();}for(let y=0;y<540;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(960,y);ctx.stroke();}ctx.restore();}
-function drawTitle(){drawPanel(220,140,520,260,"rgba(0,0,0,0.55)");drawText("TARTAROS",480,200,52,"#f6d18d","center");drawText("Oath of Hunger",480,245,22,"#c8b07a","center");drawText(`속도 이니셔티브 │ D&D 카드 │ 5층 루프`,480,290,16,"#d1dae4","center");}
+const titleLogo = loadImg("../titles/faded-dungen/title-faded-dungen-v10.png");
+function drawTitle(){
+  drawBg(bgGameStart);
+  if(titleLogo.complete&&titleLogo.naturalWidth>0){
+    const lw=440,lh=lw*(titleLogo.naturalHeight/titleLogo.naturalWidth);
+    ctx.drawImage(titleLogo,480-lw/2,80,lw,lh);
+  }
+}
 
 function drawMap(){
   if(!state.floor||!state.run) return;
+  drawBg(bgMap);
   const fl=state.floor, s=fl.size;
   const adjIds=new Set(getAdj(fl).map(n=>n.id));
   const disc=state.run.discoveredPersistent, discR=state.run.discoveredRun;
@@ -741,7 +785,7 @@ function drawMap(){
 
 function drawCombat(){
   const run=state.run,cb=state.combat;if(!run)return;
-  if(combatBg.complete&&combatBg.naturalWidth>0){ctx.drawImage(combatBg,0,0,960,540);}else{ctx.fillStyle="rgba(0,0,0,0.3)";ctx.fillRect(0,0,960,540);}
+  drawBg(getCombatBg());
   run.party.forEach((m,i)=>{const x=60,y=120+i*100,act=isActive(m),a=act?0.7:0.3;const isActing=state.actingMember===m;
     drawPanel(x,y,240,85,isActing?"rgba(40,80,140,0.8)":`rgba(12,22,40,${a})`);
     if(isActing){ctx.strokeStyle="#5da4e6";ctx.lineWidth=2;ctx.strokeRect(x,y,240,85);}
@@ -780,8 +824,8 @@ function drawCombat(){
     }}
 }
 
-function drawEvent(){if(!state.eventContext)return;const v=state.eventContext.variant;drawPanel(180,120,600,200,"rgba(14,29,33,0.75)");drawText(v.title,210,170,30,"#89f6d9","left");drawText(v.text,210,220,18,"#e0f0ff","left");}
-function drawFloorRw(){drawPanel(220,140,520,200,"rgba(39,28,12,0.76)");drawText(`${state.run.floor}층 클리어`,480,200,34,"#f6cd89","center");drawText("보상 선택",480,260,18,"#e8e0d0","center");}
+function drawEvent(){if(!state.eventContext)return;const evIdx=EVENT_VARIANTS.indexOf(state.eventContext.variant);drawBg(bgEvent[evIdx>=0?evIdx%bgEvent.length:0]);const v=state.eventContext.variant;drawPanel(180,120,600,200,"rgba(14,29,33,0.75)");drawText(v.title,210,170,30,"#89f6d9","left");drawText(v.text,210,220,18,"#e0f0ff","left");}
+function drawFloorRw(){drawBg(bgFloorBoss[state.run?.floor]||bgFloorBoss[1]);drawPanel(220,140,520,200,"rgba(39,28,12,0.76)");drawText(`${state.run.floor}층 클리어`,480,200,34,"#f6cd89","center");drawText("보상 선택",480,260,18,"#e8e0d0","center");}
 function drawCutscene(){const sc=state.activeScene;if(!sc)return;const fr=sc.frames[Math.min(state.activeSceneIndex,sc.frames.length-1)];const[r,g2,b]=fr.color;ctx.fillStyle=`rgba(${r},${g2},${b},0.3)`;ctx.fillRect(0,0,960,540);drawPanel(80,100,800,180,"rgba(0,0,0,0.5)");drawPanel(80,310,800,120,"rgba(0,0,0,0.6)");drawText(sc.title,110,150,28,"#f8eac1","left");drawText(fr.headline,110,200,22,"#ffffff","left");drawText(fr.line,110,370,20,"#f4f7fb","left");}
 function drawEnding(){const et=evalEnd(state.run.floor>=5&&aliveParty(state).length>0);const t=et==="ENDING_TRUE"?"진엔딩":et==="ENDING_LOOP"?"일반 엔딩":"실패 엔딩";const tc=et==="ENDING_TRUE"?"#50c878":et==="ENDING_LOOP"?"#f6d18d":"#ff6b6b";drawPanel(200,80,560,380,"rgba(10,14,25,0.78)");drawText(t,480,140,36,tc,"center");drawText(`귀속: ${state.run.consumedFoodCount}`,480,210,20,"#e0e8f0","center");drawText(`골드: ${state.run.gold}`,480,245,20,"#e0e8f0","center");let y=300;state.run.party.forEach(m=>{const st=isActive(m)?"활성":m.stress>STRESS_LIMIT?"붕괴":"사망";drawText(`${m.name}: HP ${m.hp}/${m.maxHp} ST ${m.stress} [${st}]`,480,y,13,isActive(m)?"#88ccaa":"#cc6666","center");y+=20;});}
 
