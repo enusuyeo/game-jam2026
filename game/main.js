@@ -3,9 +3,9 @@
    Speed Initiative | D&D Card Usage | Round-Based Combat
    ══════════════════════════════════════════════════════ */
 
-import { CARD_LIBRARY, STARTING_DECKS, MAX_DECK_SIZE, CARD_REWARD_POOL } from "./cards/card-data.js?v=2";
-import { applyCardEffect } from "./cards/card-effects.js";
-import { createEnemyGroup, createBoss, BOSS_NAMES } from "./battle/enemy-factory.js";
+import { CARD_LIBRARY, STARTING_DECKS, MAX_DECK_SIZE, CARD_REWARD_POOL } from "./cards/card-data.js?v=3";
+import { applyCardEffect } from "./cards/card-effects.js?v=3";
+import { createEnemyGroup, createBoss, BOSS_NAMES } from "./battle/enemy-factory.js?v=3";
 
 const STORAGE_KEY = "tartaros_v4";
 const STRESS_LIMIT = 95;
@@ -23,9 +23,9 @@ const PHASE = {
 const FLOOR_NAMES = ["Branded Cellblock", "Fractured Vault", "Corridor of Oblivion", "Hall of Judgment", "Gatekeeper's Altar"];
 const FLOOR_COLORS = [[46,89,142],[102,69,139],[61,116,97],[126,68,74],[124,93,50]];
 const PARTY_TEMPLATES = [
-  { name: "Arke", role: "Frontline Guardian", maxHp: 48 },
-  { name: "Rikos", role: "Melee Executioner", maxHp: 40 },
   { name: "Serin",  role: "Disruption Priest", maxHp: 34 },
+  { name: "Rikos", role: "Melee Executioner", maxHp: 40 },
+  { name: "Arke", role: "Frontline Guardian", maxHp: 48 },
 ];
 
 const EVENT_VARIANTS = [
@@ -53,6 +53,18 @@ const CUTSCENES = buildCutscenes();
 
 const cardFrontImg = new Image();
 cardFrontImg.src = "../assets/ui/pixel/deck_ui/card_front.png";
+const charSprites = {
+  Arke: { img: new Image(), fw: 200, fh: 373, cols: 4, seq:[0,1,2,3], scale:0.8 },
+  Rikos: { img: new Image(), fw: 200, fh: 373, cols: 4, seq:[0,1,2,3], scale:0.8 },
+  Serin: { img: new Image(), fw: 256, fh: 768, cols: 4, seq:[1,1,2,2], scale:1.7, yOffset:140 },
+};
+charSprites.Arke.img.src = "../assets/ui/pixel/characters/sideview/arke-standing-sprite.png";
+charSprites.Rikos.img.src = "../assets/ui/pixel/characters/sideview/arke-standing-sprite.png";
+charSprites.Serin.img.src = "../assets/ui/pixel/characters/sideview/serin-standing-sprite.png";
+const SPRITE_FPS = 6;
+let spriteFrame = 0, spriteLastTime = 0;
+const hpBarFrame = new Image();
+hpBarFrame.src = "../assets/ui/pixel/hp-ui.png";
 const cardBackImg = new Image();
 cardBackImg.src = "../assets/ui/pixel/deck_ui/card_back.png";
 
@@ -124,7 +136,10 @@ requestAnimationFrame(loop);
 renderAll();
 initPointerEvents();
 
-function loop() { drawScene(); requestAnimationFrame(loop); }
+function loop(ts) {
+  if(ts-spriteLastTime > 1000/SPRITE_FPS) { spriteFrame=(spriteFrame+1)%4; spriteLastTime=ts; }
+  drawScene(); requestAnimationFrame(loop);
+}
 
 /* ── Party / Enemy helpers ───────────────────── */
 function createMember(tpl) { return { name:tpl.name, role:tpl.role, hp:tpl.maxHp, maxHp:tpl.maxHp, stress:0, block:0, speed:0, deck:[...STARTING_DECKS[tpl.name]] }; }
@@ -300,7 +315,11 @@ function renderAll() {
   renderHUD(); renderDesc(); renderActions(); renderLogs();
   const bb = document.querySelector(".bottom-bar");
   const ht = document.querySelector(".hud-top");
-  if (bb) bb.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
+  if (bb) {
+    bb.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
+    const isCombat = state.phase === PHASE.COMBAT || state.phase === PHASE.BATTLE_REWARD || state.phase === PHASE.BATTLE_REWARD_ASSIGN;
+    bb.classList.toggle("combat-top", isCombat);
+  }
   if (ht) ht.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
 }
 
@@ -310,33 +329,43 @@ function renderHUD() {
   addChip(hudPanel,"Floor",`${run.floor}/5`); addChip(hudPanel,"Gold",`${run.gold}`);
   addChip(hudPanel,"Binding",`${run.consumedFoodCount}`);
   if(run.attackBonus)addChip(hudPanel,"ATK",`+${run.attackBonus}`);
-  const sep=document.createElement("div");sep.className="hud-separator";hudPanel.appendChild(sep);
-  run.party.forEach(m=>{
-    const el=document.createElement("div"); el.className="hud-member"+(isActive(m)?"":" dead");
-    const hp=m.maxHp>0?(m.hp/m.maxHp)*100:0, st=Math.min(m.stress,100);
-    const hc=hp>50?"#50c878":hp>25?"#e6b84d":"#ff4d4d";
-    const sc=st<=30?"#50c878":st<=60?"#e6b84d":st<=STRESS_LIMIT?"#d46ab0":"#ff4d4d";
-    const tag=!isActive(m)?(m.stress>STRESS_LIMIT?" [Collapsed]":" [Dead]"):"";
-    el.innerHTML=`<span class="m-name">${m.name}</span><span class="m-role">${m.role}</span>
-      <span class="hp-bar"><span class="fill" style="width:${hp}%;background:${hc}"></span></span><span class="hp-num">${m.hp}</span>
-      <span class="stress-bar"><span class="fill" style="width:${st}%;background:${sc}"></span></span><span class="stress-num">${m.stress}${tag}</span>
-      <span style="color:#8a9bb0;font-size:9px">SPD${m.speed} Deck${m.deck.length}</span>
-      ${m.block>0?`<span style="color:#5da4e6;font-size:10px">🛡${m.block}</span>`:""}`;
-    hudPanel.appendChild(el);
-  });
+  if(!state.combat){
+    const sep=document.createElement("div");sep.className="hud-separator";hudPanel.appendChild(sep);
+    run.party.forEach(m=>{
+      const el=document.createElement("div"); el.className="hud-member"+(isActive(m)?"":" dead");
+      const hp=m.maxHp>0?(m.hp/m.maxHp)*100:0, st=Math.min(m.stress,100);
+      const hc=hp>50?"#50c878":hp>25?"#e6b84d":"#ff4d4d";
+      const sc=st<=30?"#50c878":st<=60?"#e6b84d":st<=STRESS_LIMIT?"#d46ab0":"#ff4d4d";
+      const tag=!isActive(m)?(m.stress>STRESS_LIMIT?" [Collapsed]":" [Dead]"):"";
+      el.innerHTML=`<span class="m-name">${m.name}</span><span class="m-role">${m.role}</span>
+        <span class="hp-bar"><span class="fill" style="width:${hp}%;background:${hc}"></span></span><span class="hp-num">${m.hp}</span>
+        <span class="stress-bar"><span class="fill" style="width:${st}%;background:${sc}"></span></span><span class="stress-num">${m.stress}${tag}</span>
+        <span style="color:#8a9bb0;font-size:9px">Deck${m.deck.length}</span>
+        ${m.block>0?`<span style="color:#5da4e6;font-size:10px">🛡${m.block}</span>`:""}`;
+      hudPanel.appendChild(el);
+    });
+  }
   if(state.combat){const s2=document.createElement("div");s2.className="hud-separator";hudPanel.appendChild(s2);
     addChip(hudPanel,"Turn",`${state.combat.roundNumber}`);addChip(hudPanel,"Draw Pile",`${state.combat.drawPile.length}`);addChip(hudPanel,"Hand",`${state.combat.hand.length}`);}
 }
 function addChip(p,l,v){const el=document.createElement("div");el.className="hud-chip";el.innerHTML=`<span class="label">${l}</span><span class="val">${v}</span>`;p.appendChild(el);}
 
 function renderDesc() {
-  let msg="";
-  if(state.phase===PHASE.COMBAT&&state.discarding&&state.actingMember) msg=`${state.actingMember.name}: Hand limit exceeded! Please discard cards.`;
-  else if(state.phase===PHASE.COMBAT&&state.waitingForAlly&&state.actingMember) msg=`${state.actingMember.name}'s turn (SPD ${state.actingMember.speed}) — Draw ${DRAW_PER_CHAR} cards | Attack: Drag to enemy / Defense-Buff: Click`;
-  else if(state.phase===PHASE.TITLE||state.phase==="SETTINGS") msg="";
-  else if(state.phase===PHASE.MAP) msg="";
-  else msg="";
-  descriptionPanel.textContent=msg; overlayHint.textContent="";
+  descriptionPanel.innerHTML=""; overlayHint.textContent="";
+  if(state.phase===PHASE.COMBAT&&state.turnOrder.length>0){
+    const parts=state.turnOrder.map((u,idx)=>{
+      const isCur=idx===state.currentActionIdx;
+      const done=idx<state.currentActionIdx;
+      const nm=u.type==="ally"?state.run.party[u.index].name:(state.combat?state.combat.enemies[u.index].name:"?");
+      const spd=u.speed;
+      let color=done?"#555":isCur?"#ffc857":u.type==="ally"?"#88bbdd":"#cc8888";
+      const arrow=isCur?"▶ ":"";
+      return `<span style="color:${color};font-size:10px;${isCur?"font-weight:700;":""}">${arrow}${nm}(${spd})</span>`;
+    });
+    descriptionPanel.innerHTML=parts.join(" → ");
+  } else if(state.phase===PHASE.COMBAT&&state.discarding) {
+    descriptionPanel.textContent="Discard cards";
+  }
 }
 
 function renderActions() {
@@ -346,13 +375,13 @@ function renderActions() {
     [PHASE.TITLE]:()=>{head.textContent="";renderTitleButtons(row);},
     ["SETTINGS"]:()=>{head.textContent="";renderSettingsPanel(row);},
     [PHASE.MAP]:()=>{head.textContent="Map";renderMapAct(row);},
-    [PHASE.COMBAT]:()=>{head.textContent=state.discarding?"Discard Cards":state.waitingForAlly?"Select Card":"Combat";renderCombatAct(row);},
+    [PHASE.COMBAT]:()=>{head.textContent="";renderCombatAct(row);},
     [PHASE.EVENT]:()=>{head.textContent="";renderEventAct(row);},
-    [PHASE.BATTLE_REWARD]:()=>{head.textContent="Reward";renderRewardAct(row);},
-    [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="Select Character";renderAssignAct(row);},
-    [PHASE.FLOOR_REWARD]:()=>{head.textContent="Floor Reward";renderFloorAct(row);},
-    [PHASE.FLOOR_REWARD_PICK]:()=>{head.textContent="Select Character";renderFloorPickAct(row);},
-    [PHASE.FLOOR_REWARD_REMOVE]:()=>{head.textContent="Remove Card";renderFloorRemoveAct(row);},
+    [PHASE.BATTLE_REWARD]:()=>{head.textContent="";renderRewardAct(row);},
+    [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="";renderAssignAct(row);},
+    [PHASE.FLOOR_REWARD]:()=>{head.textContent="";renderFloorAct(row);},
+    [PHASE.FLOOR_REWARD_PICK]:()=>{head.textContent="";renderFloorPickAct(row);},
+    [PHASE.FLOOR_REWARD_REMOVE]:()=>{head.textContent="";renderFloorRemoveAct(row);},
     [PHASE.CUTSCENE]:()=>{head.textContent="Cutscene";row.appendChild(btn("Next","primary",nextFrame));row.appendChild(btn("Skip","",skipScene));},
     [PHASE.ENDING]:()=>{head.textContent="Result";row.appendChild(btn("Restart","primary",startNewRun));},
   };
@@ -504,18 +533,31 @@ function renderCombatAct(c) {
     const typeColor = card.type === "attack" ? "#ff8866" : "#66ccff";
     const typeLabel = card.type === "attack" ? "Attack" : "Skill";
     el.innerHTML = `
-      <div class="vc-cost">${card.cost}</div>
+      <div class="vc-cost" title="Stress +${card.cost}">💀${card.cost}</div>
       <div class="vc-name">${card.name}</div>
       <div class="vc-type" style="color:${typeColor}">${typeLabel}</div>
       <div class="vc-desc">${card.text}</div>
-      <div class="vc-hint">${isDrag ? "▷ Drag to enemy" : "▷ Click to use"}</div>
+      <div class="vc-hint">${isDrag ? "▷ Drag" : "▷ Click"}</div>
     `;
     if (isDrag) { el.addEventListener("pointerdown", (e) => onCardDragStart(e, i)); }
     else { el.onclick = () => playAllyCard(i, -1); }
     cardRow.appendChild(el);
   });
-  c.appendChild(cardRow);
-  c.appendChild(btn("Pass", "", allyPass));
+  const combatRow = document.createElement("div");
+  combatRow.style.cssText = "display:flex;align-items:flex-start;gap:8px;width:100%;";
+  combatRow.appendChild(cardRow);
+  const sideCol = document.createElement("div");
+  sideCol.style.cssText = "display:flex;flex-direction:column;gap:0px;position:absolute;top:20px;right:6px;";
+  const passBtn = imgBtn("../assets/ui/pixel/buttons/pass_turn.png", allyPass);
+  passBtn.querySelector("img").style.cssText = "height:auto;width:80px;";
+  passBtn.style.padding = "0";
+  sideCol.appendChild(passBtn);
+  const deckBtn = imgBtn("../assets/ui/pixel/buttons/deck_details.png", () => showDeckView());
+  deckBtn.querySelector("img").style.cssText = "height:auto;width:80px;";
+  deckBtn.style.padding = "0";
+  sideCol.appendChild(deckBtn);
+  combatRow.appendChild(sideCol);
+  c.appendChild(combatRow);
 }
 
 function renderEventAct(c) {
@@ -540,11 +582,47 @@ function renderEventAct(c) {
   wrap.appendChild(grid);
   c.appendChild(wrap);
 }
-function renderRewardAct(c) { state.rewardChoices.forEach(cid=>{const card=CARD_LIBRARY[cid];c.appendChild(btn(`<span class="card-chip">${card.name}</span> — ${card.text}`,"good",()=>{state.pendingRewardCard=cid;state.phase=PHASE.BATTLE_REWARD_ASSIGN;renderAll();}));}); c.appendChild(btn("Skip (Gold +10)","",()=>{state.run.gold+=10;logLine(state,"Gold +10");completeNode(state.combat.node);}));}
-function renderAssignAct(c) { const cid=state.pendingRewardCard;if(!cid)return;const card=CARD_LIBRARY[cid];const el=aliveParty(state).filter(m=>m.deck.length<MAX_DECK_SIZE);if(!el.length){logLine(state,"Deck full.");state.run.gold+=10;state.pendingRewardCard=null;completeNode(state.combat.node);return;} const info=document.createElement("div");info.innerHTML=`<strong>${card.name}</strong> Select a character to add:`;info.style.cssText="font-size:12px;margin-bottom:4px;";c.appendChild(info);el.forEach(m=>c.appendChild(btn(`${m.name} (Deck ${m.deck.length}/${MAX_DECK_SIZE})`,"good",()=>{m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);state.pendingRewardCard=null;completeNode(state.combat.node);})));c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.BATTLE_REWARD;renderAll();}));}
-function renderFloorAct(c) { c.appendChild(btn("Remove Card","good",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));c.appendChild(btn("Attack +1","",()=>{state.run.attackBonus+=1;logLine(state,"Attack +1.");proceedFloor();}));c.appendChild(btn("Rest: HP+12, Stress-15","",()=>{aliveParty(state).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+12);reduceStress(m,15)});logLine(state,"Rested.");proceedFloor();}));}
-function renderFloorPickAct(c) { const ms=aliveParty(state).filter(m=>m.deck.length>0);if(!ms.length){logLine(state,"No cards.");proceedFloor();return;}ms.forEach(m=>c.appendChild(btn(`${m.name} (Deck ${m.deck.length})`,"",()=>{state.removeMember=m;state.phase=PHASE.FLOOR_REWARD_REMOVE;renderAll();})));c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.FLOOR_REWARD;renderAll();}));}
-function renderFloorRemoveAct(c) { const m=state.removeMember;if(!m)return;[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"en")).forEach(cid=>{const cnt=m.deck.filter(x=>x===cid).length;c.appendChild(btn(`${CARD_LIBRARY[cid].name} x${cnt}`,"danger",()=>{const idx=m.deck.indexOf(cid);if(idx>=0)m.deck.splice(idx,1);logLine(state,`${m.name}: removed.`);proceedFloor();}));});c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));}
+function renderRewardAct(c) {
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid";
+  state.rewardChoices.forEach(cid=>{const card=CARD_LIBRARY[cid];const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${card.name} — ${card.text}`;b.onclick=()=>{state.pendingRewardCard=cid;state.phase=PHASE.BATTLE_REWARD_ASSIGN;renderAll();};grid.appendChild(b);});
+  const skip=document.createElement("button");skip.className="event-choice-btn";skip.textContent="Skip (Gold +10)";skip.onclick=()=>{state.run.gold+=10;logLine(state,"Gold +10");completeNode(state.combat.node);};grid.appendChild(skip);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderAssignAct(c) {
+  const cid=state.pendingRewardCard;if(!cid)return;const card=CARD_LIBRARY[cid];
+  const el=aliveParty(state).filter(m=>m.deck.length<MAX_DECK_SIZE);
+  if(!el.length){logLine(state,"Deck full.");state.run.gold+=10;state.pendingRewardCard=null;completeNode(state.combat.node);return;}
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid";
+  el.forEach(m=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${m.name} (${m.deck.length}/${MAX_DECK_SIZE})`;b.onclick=()=>{m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);state.pendingRewardCard=null;completeNode(state.combat.node);};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.BATTLE_REWARD;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorAct(c) {
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid";
+  [{t:"Remove Card",fn:()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}},{t:"Attack +1",fn:()=>{state.run.attackBonus+=1;logLine(state,"Attack +1.");proceedFloor();}},{t:"Rest: HP+12, Stress-15",fn:()=>{aliveParty(state).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+12);reduceStress(m,15)});logLine(state,"Rested.");proceedFloor();}}].forEach(({t,fn})=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=t;b.onclick=fn;grid.appendChild(b);});
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorPickAct(c) {
+  const ms=aliveParty(state).filter(m=>m.deck.length>0);
+  if(!ms.length){logLine(state,"No cards.");proceedFloor();return;}
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid";
+  ms.forEach(m=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${m.name} (${m.deck.length})`;b.onclick=()=>{state.removeMember=m;state.phase=PHASE.FLOOR_REWARD_REMOVE;renderAll();};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.FLOOR_REWARD;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorRemoveAct(c) {
+  const m=state.removeMember;if(!m)return;
+  const unique=[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"en"));
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid";
+  unique.forEach(cid=>{const cnt=m.deck.filter(x=>x===cid).length;const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${CARD_LIBRARY[cid].name} x${cnt}`;b.onclick=()=>{const idx=m.deck.indexOf(cid);if(idx>=0)m.deck.splice(idx,1);logLine(state,`${m.name}: removed.`);proceedFloor();};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
 function renderLogs() { logPanel.innerHTML=""; }
 function btn(l,cls,fn,dis=false){const b=document.createElement("button");b.innerHTML=l;if(cls)b.classList.add(cls);b.disabled=dis;b.onclick=fn;return b;}
 
@@ -660,7 +738,7 @@ function startCombat(nd,isBoss) {
 
 /* ── Round-based combat ────────────────────────── */
 
-const DRAW_PER_CHAR = 2;
+const DRAW_PER_CHAR = 1;
 
 function startCombatRound() {
   const cb=state.combat, run=state.run; if(!cb)return;
@@ -730,8 +808,12 @@ function processNextAction() {
   const member=state.run.party[unit.index];
   if(!isActive(member)){state.currentActionIdx++;processNextAction();return;}
 
-  drawCardsFromPile(cb, DRAW_PER_CHAR);
-  logLine(state, `${member.name} drew ${DRAW_PER_CHAR} cards`);
+  if(cb.roundNumber === 1 && cb.hand.length === 0) {
+    let n = HAND_SIZE;
+    while(n > 0 && cb.hand.length < 10 && cb.drawPile.length) { cb.hand.push(cb.drawPile.pop()); n--; }
+  } else if(cb.roundNumber > 1) {
+    drawCardsFromPile(cb, DRAW_PER_CHAR);
+  }
 
   if(!cb.hand.length&&!cb.drawPile.length){
     logLine(state, `${member.name}: no cards left, pass.`);
@@ -755,10 +837,12 @@ function processNextAction() {
 function playAllyCard(cardIdx, targetEnemyIdx) {
   if(!state.waitingForAlly||!state.combat)return;
   const cb=state.combat, cid=cb.hand[cardIdx], card=CARD_LIBRARY[cid];
+  const member=state.actingMember;
   cb.hand.splice(cardIdx,1); cb.spentPile.push(cid);
   const ectx=makeEffectCtx(state,cb);
   applyCardEffect(cid,ectx,targetEnemyIdx);
-  logLine(state,`▶ ${state.actingMember.name}: ${card.name}`);
+  if(member) addStress(state, member, card.cost);
+  logLine(state,`▶ ${member?.name||"?"}: ${card.name} (stress +${card.cost})`);
 
   state.waitingForAlly=false;state.actingMember=null;state.currentActionIdx++;
   if(aliveEnemyList(cb).length===0){handleWin();return;}
@@ -775,6 +859,21 @@ function discardCard(cardIdx) {
     state.waitingForAlly=true;
   }
   renderAll();
+}
+
+function showDeckView() {
+  if(!state.combat||!state.actingMember) return;
+  const member = state.actingMember;
+  const cb = state.combat;
+  const deckCards = member.deck.reduce((acc, cid) => { acc[cid]=(acc[cid]||0)+1; return acc; }, {});
+  const lines = Object.entries(deckCards).map(([cid,cnt]) => {
+    const card = CARD_LIBRARY[cid];
+    return `${card.name} x${cnt} (💀${card.cost})`;
+  }).join("\n");
+  const handCount = cb.hand.length;
+  const drawCount = cb.drawPile.length;
+  const spentCount = cb.spentPile.length;
+  alert(`[${member.name}'s Deck] ${member.deck.length} cards\n${lines}\n\n─── Combat ───\nHand: ${handCount} │ Draw Pile: ${drawCount} │ Spent: ${spentCount}`);
 }
 
 function allyPass() {
@@ -901,18 +1000,60 @@ function drawMap(){
 function drawCombat(){
   const run=state.run,cb=state.combat;if(!run)return;
   drawBg(getCombatBg());
-  run.party.forEach((m,i)=>{const x=60,y=120+i*100,act=isActive(m),a=act?0.7:0.3;const isActing=state.actingMember===m;
-    drawPanel(x,y,240,85,isActing?"rgba(40,80,140,0.8)":`rgba(12,22,40,${a})`);
-    if(isActing){ctx.strokeStyle="#5da4e6";ctx.lineWidth=2;ctx.strokeRect(x,y,240,85);}
-    drawText(m.name,x+10,y+18,16,act?"#8bc1ff":"#556677","left");
-    if(state.diceRolling.active && act) {
-      const key=`ally_${i}`, fs=state.diceRolling.finalSpeeds;
-      if(state.diceRolling.settled) { drawText(`🎲 ${fs.get(key)}`,x+170,y+18,14,"#ffc857","left"); }
-      else { drawText(`🎲 ${randomInt(1,6)}`,x+170,y+18,14,"rgba(255,255,255,0.6)","left"); }
-    } else if(m.speed>0) { drawText(`SPD ${m.speed}`,x+180,y+18,11,"#88aacc","left"); }
-    const hp=m.maxHp>0?m.hp/m.maxHp:0,hc=hp>0.5?"#50c878":hp>0.25?"#e6b84d":"#ff4d4d";drawBarBg(x+10,y+36,160,8);drawBarFill(x+10,y+36,160*hp,8,hc);drawText(`${m.hp}/${m.maxHp}`,x+178,y+40,11,"#dde8f2","left");
-    const sp=Math.min(m.stress,100)/100,sc=m.stress<=30?"#50c878":m.stress<=60?"#e6b84d":m.stress<=STRESS_LIMIT?"#d46ab0":"#ff4d4d";drawBarBg(x+10,y+52,100,6);drawBarFill(x+10,y+52,100*sp,6,sc);drawText(`ST ${m.stress}`,x+118,y+55,10,"#aabbcc","left");
-    if(m.block>0)drawText(`🛡${m.block}`,x+175,y+55,10,"#5da4e6","left");if(!act)drawText(m.stress>STRESS_LIMIT?"Collapsed":"Dead",x+10,y+72,12,"#ff6666","left");});
+  const charW=150, charH=280, charGap=-10, partyStartX=10;
+  run.party.forEach((m,i)=>{
+    const cx=partyStartX+i*(charW+charGap), cy=450;
+    const act=isActive(m), isActing=state.actingMember===m;
+    const alpha=act?1.0:0.3;
+
+    ctx.save(); ctx.globalAlpha=alpha;
+    const spr=charSprites[m.name]||charSprites.Arke;
+    if(spr.img.complete&&spr.img.naturalWidth>0){
+      const frameIdx=spr.seq[spriteFrame%spr.seq.length];
+      const sx=frameIdx*spr.fw, sy=0;
+      const ratio=spr.fw/spr.fh;
+      const drawH=charH*(spr.scale||1);
+      const drawW=drawH*ratio;
+      const drawX=cx+(charW-drawW)/2;
+      const yOff=spr.yOffset||0;
+      ctx.drawImage(spr.img,sx,sy,spr.fw,spr.fh,drawX,cy-drawH+yOff,drawW,drawH);
+    } else {
+      drawPanel(cx,cy-charH,charW,charH,`rgba(12,22,40,0.7)`);
+    }
+    ctx.restore();
+
+    if(isActing){
+      ctx.strokeStyle="#ffc857";ctx.lineWidth=2;
+      ctx.strokeRect(cx-2,cy-charH-2,charW+4,charH+4);
+    }
+
+    drawText(m.name,cx+charW/2,cy-charH-8,10,act?"#ffc857":"#556677","center");
+
+    if(state.diceRolling.active&&act){
+      const key=`ally_${i}`,fs=state.diceRolling.finalSpeeds;
+      if(state.diceRolling.settled) drawText(`🎲${fs.get(key)}`,cx+charW/2,cy-charH-18,11,"#ffc857","center");
+      else drawText(`🎲${randomInt(1,6)}`,cx+charW/2,cy-charH-18,11,"rgba(255,255,255,0.6)","center");
+    } else if(act&&m.speed>0) {
+      drawText(`SPD ${m.speed}`,cx+charW/2,cy-charH-18,9,"#88aacc","center");
+    }
+
+    const barW=charW, barH=Math.round(charW/2.7), barX=cx, barY=cy+4;
+    const hpPct=m.maxHp>0?m.hp/m.maxHp:0;
+    const hpColor=hpPct>0.5?"#50c878":hpPct>0.25?"#e6b84d":"#ff4d4d";
+    const padX=Math.round(barW*0.08), padY=Math.round(barH*0.35);
+    const fillX=barX+padX, fillY=barY+padY, fillMaxW=barW-padX*2, fillH=barH-padY*2;
+    ctx.fillStyle="rgba(20,10,10,0.8)";
+    ctx.beginPath();ctx.roundRect(fillX,fillY,fillMaxW,fillH,2);ctx.fill();
+    ctx.fillStyle=hpColor;
+    if(fillMaxW*hpPct>0){ctx.beginPath();ctx.roundRect(fillX,fillY,fillMaxW*hpPct,fillH,2);ctx.fill();}
+    if(hpBarFrame.complete&&hpBarFrame.naturalWidth>0){
+      ctx.drawImage(hpBarFrame,barX,barY,barW,barH);
+    }
+    drawText(`${m.hp}/${m.maxHp}`,cx+charW/2,barY+barH/2,9,"#fff","center");
+
+    if(m.block>0) drawText(`🛡${m.block}`,cx+charW+4,cy-10,9,"#5da4e6","left");
+    if(!act) drawText(m.stress>STRESS_LIMIT?"💀":"☠",cx+charW/2,cy-charH/2,24,"#ff6666","center");
+  });
 
   if(cb){cb.enemies.forEach((e,i)=>{const x=620,y=120+i*100,alive=e.hp>0;const hl=highlightedEnemy===i;
     drawPanel(x,y,280,85,hl?"rgba(120,40,40,0.9)":`rgba(40,16,18,${alive?0.72:0.25})`);
@@ -928,10 +1069,6 @@ function drawCombat(){
     if(e.bleed>0)drawText(`🩸${e.bleed}`,x+10,y+72,10,"#cc6666","left");});
     drawText("VS",480,240,36,"rgba(255,255,255,0.1)","center");
 
-    if(state.turnOrder.length){let ty=440;drawText(`Turn ${cb.roundNumber} Turn Order:`,340,ty,12,"#8a9bb0","left");
-      state.turnOrder.forEach((u,idx)=>{const isCur=idx===state.currentActionIdx;const nm=u.type==="ally"?state.run.party[u.index].name:cb.enemies[u.index].name;const done=idx<state.currentActionIdx;
-        const col=done?"#555":isCur?"#ffc857":u.type==="ally"?"#88bbdd":"#cc8888";
-        drawText(`${idx+1}.${nm}(${u.speed})`,340+idx*90,ty+18,10,col,"left");});}
 
     if(state.enemyActing){
       drawPanel(200,16,560,44,"rgba(60,20,20,0.92)");
