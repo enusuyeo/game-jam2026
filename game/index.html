@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Tartaros: Oath of Hunger</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="game-container">
+      <div class="game-viewport" id="gameViewport">
+        <canvas id="sceneCanvas" width="960" height="540"></canvas>
+
+        <div class="hud-top" id="hudPanel"></div>
+
+        <div class="desc-toast" id="descriptionPanel"></div>
+
+        <div class="bottom-bar">
+          <div class="actions-area" id="actionsPanel"></div>
+          <div class="log-area" id="logPanel"></div>
+        </div>
+
+        <div class="overlay-hint" id="overlayHint"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
