@@ -1002,7 +1002,7 @@ function drawCombat(){
   drawBg(getCombatBg());
   const charW=150, charH=280, charGap=-10, partyStartX=10;
   run.party.forEach((m,i)=>{
-    const cx=partyStartX+i*(charW+charGap), cy=450;
+    const cx=partyStartX+i*(charW+charGap), cy=420;
     const act=isActive(m), isActing=state.actingMember===m;
     const alpha=act?1.0:0.3;
 

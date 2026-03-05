@@ -166,17 +166,22 @@ body {
   bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 186, 73, 0.2);
-  border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 10px;
+  background: url("../assets/ui/pixel/buttons/speed_ui.png") center/100% 100% no-repeat;
+  border: none;
+  border-radius: 0;
+  padding: 14px 30px;
+  font-size: 11px;
   color: #d0dae8;
   z-index: 10;
   pointer-events: none;
-  max-width: 85%;
+  width: 85%;
+  max-width: 750px;
+  min-height: 40px;
   text-align: center;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .desc-toast:empty {
