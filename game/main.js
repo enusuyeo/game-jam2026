@@ -11,6 +11,10 @@ const STORAGE_KEY = "tartaros_v4";
 const STRESS_LIMIT = 95;
 const HAND_SIZE = 5;
 const MAX_HAND = 7;
+const FLOOR_GRID_SIZE = { 1:3, 2:4, 3:5, 4:5, 5:6 };
+const gameSettings = { musicVol: 0.7, drawSpeed: 1.0 };
+const titleLogo = new Image();
+titleLogo.src = "../assets/ui/pixel/titles/title-faded-dungen-v10.png";
 
 const PHASE = {
   TITLE: "TITLE", MAP: "MAP", COMBAT: "COMBAT", EVENT: "EVENT",
@@ -80,6 +84,43 @@ function loadImg(name) { const img = new Image(); img.src = BG_PATH + name; retu
 const bgGameStart = loadImg("bg_gamestart.png");
 const bgMap = loadImg("map_bg.png");
 const MAP_UI = "../assets/ui/pixel/map-ui/";
+
+/* ── Audio System ────────────────────────────── */
+const AUDIO_PATH = "../assets/";
+const bgmTracks = {
+  title: AUDIO_PATH+"bgm/bgm-floor1.mp3",
+  1: AUDIO_PATH+"bgm/bgm-floor1.mp3",
+  2: AUDIO_PATH+"bgm/bgm-floor2.mp3",
+  3: AUDIO_PATH+"bgm/bgm-floor3.mp3",
+  4: AUDIO_PATH+"bgm/bgm-floorr4.mp3",
+  5: AUDIO_PATH+"bgm/bgm-floor5.mp3",
+  endFail: AUDIO_PATH+"bgm/bgm-fail-ending.mp3",
+  endLoop: AUDIO_PATH+"bgm/bgm-loop-ending.mp3",
+  endTrue: AUDIO_PATH+"bgm/bgm-true-ending.mp3",
+};
+const sfx = {
+  cardPick: new Audio(AUDIO_PATH+"sounds/card-pick/sfx-card-select-sharp-snap-0p8s.mp3"),
+  hit: new Audio(AUDIO_PATH+"sounds/hit/sfx-hit-sword-slice-whoosh-0p5s.mp3"),
+  hitDeep: new Audio(AUDIO_PATH+"sounds/hit/sfx-hit-deep-thud-2s.mp3"),
+  hitArrow: new Audio(AUDIO_PATH+"sounds/hit/sfx-hit-arrow-whoosh-0p5s.mp3"),
+  guardSuccess: new Audio(AUDIO_PATH+"sounds/guard-success/sfx-guard-success-parry-spark-1s.mp3"),
+  guardFail: new Audio(AUDIO_PATH+"sounds/guard-fail/sfx-guard-fail-metal-clink-1s.mp3"),
+  diceRoll: new Audio(AUDIO_PATH+"audio/sfx-dice-roll-wood-rattle-1p5s.mp3"),
+};
+let currentBgm = null;
+let currentBgmSrc = "";
+function playBgm(key) {
+  const src = bgmTracks[key]; if(!src) return;
+  if(currentBgmSrc === src) return;
+  if(currentBgm) { currentBgm.pause(); currentBgm.currentTime=0; }
+  currentBgm = new Audio(src);
+  currentBgm.loop = true;
+  currentBgm.volume = gameSettings.musicVol;
+  currentBgm.play().catch(e=>console.warn("BGM play failed:",e.message));
+  currentBgmSrc = src;
+}
+function stopBgm() { if(currentBgm){currentBgm.pause();currentBgm.currentTime=0;} currentBgmSrc=""; }
+function playSfx(key) { const s=sfx[key]; if(!s)return; s.currentTime=0; s.volume=gameSettings.musicVol; s.play().catch(e=>console.warn("SFX failed:",e.message)); }
 const nodeBasicImg = new Image(); nodeBasicImg.src = MAP_UI + "basic-map-node-v01.png";
 const nodeBossImg = new Image(); nodeBossImg.src = MAP_UI + "node-boss.png";
 const nodeEventImg = new Image(); nodeEventImg.src = MAP_UI + "node-event.png";
@@ -99,6 +140,9 @@ const bgFloorBoss = {
   4: loadImg("bg-04-boss-wall.png"),
   5: loadImg("bg-05-boss-wall.png"),
 };
+const bgEndTrue = loadImg("../ending/bg-ending-true.png");
+const bgEndFail = loadImg("../ending/bg-ending-fail.png");
+const bgEndStress = loadImg("../ending/bg-ending-stress.png");
 const bgEvent = [
   loadImg("bg-06-catacomb-wall.png"),
   loadImg("bg-06-prison-chapel-wall.png"),
@@ -142,6 +186,10 @@ let dragState = null;
 let highlightedEnemy = -1;
 const DICE_ROLL_MS = 800;
 const DICE_SETTLE_MS = 1300;
+const BATTLE_NAMES=["Rush Battle","Ambush Battle","Cleanup Skirmish","Blockade Break","Engagement","Iron Gate Breach"];
+const EVENT_NAMES_MAP=["Forbidden Altar","Memory Well","Shadow Market","Silent Corridor","Wish Offer"];
+const NODE_VISIT_KEY = "tartaros_node_visits";
+const DRAW_PER_CHAR = 1;
 
 requestAnimationFrame(loop);
 renderAll();
@@ -404,8 +452,6 @@ function imgBtn(src, onClick) {
   return b;
 }
 
-const gameSettings = { musicVol: 0.7, drawSpeed: 1.0 };
-
 function renderTitleButtons(c) {
   const BTN = "../assets/ui/pixel/buttons/";
   const wrap = document.createElement("div");
@@ -636,15 +682,13 @@ function styledBtn(label,fn){
 }
 
 /* ── Game Logic ──────────────────────────────── */
+
 function startNewRun() {
+  const unlock=new Audio();unlock.play().catch(()=>{});
   state.run={floor:1,party:PARTY_TEMPLATES.map(createMember),gold:0,consumedFoodCount:0,attackBonus:0,memoryFragments:0,discoveredPersistent:loadPersistent(),discoveredRun:new Set(),runIndex:Date.now(),collapsedNames:[],stress:0};
   state.logs=[];state.turnOrder=[];state.currentActionIdx=0;state.waitingForAlly=false;state.actingMember=null;state.discarding=false;
   loadFloor(1);
 }
-const FLOOR_GRID_SIZE = { 1:3, 2:4, 3:5, 4:5, 5:6 };
-const BATTLE_NAMES=["Rush Battle","Ambush Battle","Cleanup Skirmish","Blockade Break","Engagement","Iron Gate Breach"];
-const EVENT_NAMES_MAP=["Forbidden Altar","Memory Well","Shadow Market","Silent Corridor","Wish Offer"];
-const NODE_VISIT_KEY = "tartaros_node_visits";
 
 function loadNodeVisits(){ try{const r=localStorage.getItem(NODE_VISIT_KEY);return r?JSON.parse(r):{};} catch{return {};} }
 function saveNodeVisit(nodeId, info){ const v=loadNodeVisits(); v[nodeId]=info; localStorage.setItem(NODE_VISIT_KEY,JSON.stringify(v)); }
@@ -654,7 +698,9 @@ function loadFloor(fn){
   state.run.floor=fn; state.floor=genFloor(fn);
   state.phase=PHASE.MAP; state.combat=null; state.eventContext=null;
   state.rewardChoices=[]; state.pendingRewardCard=null;
-  state.turnOrder=[]; state.waitingForAlly=false; renderAll();
+  state.turnOrder=[]; state.waitingForAlly=false;
+  playBgm(fn);
+  renderAll();
 }
 
 function genFloor(fn){
@@ -747,8 +793,6 @@ function startCombat(nd,isBoss) {
 
 /* ── Round-based combat ────────────────────────── */
 
-const DRAW_PER_CHAR = 1;
-
 function startCombatRound() {
   const cb=state.combat, run=state.run; if(!cb)return;
   if(!cb.hand.length&&!cb.drawPile.length){handleFail("All cards exhausted!");return;}
@@ -758,6 +802,7 @@ function startCombatRound() {
   cb.enemies.forEach((e,i) => { if(e.hp>0) finalSpeeds.set(`enemy_${i}`, randomInt(1,6)); });
 
   state.diceRolling = { active: true, startTime: Date.now(), settled: false, finalSpeeds };
+  playSfx("diceRoll");
   logLine(state, `── Turn ${cb.roundNumber} Dice ──`);
   renderAll();
 
@@ -853,7 +898,9 @@ function playAllyCard(cardIdx, targetEnemyIdx) {
   const member=state.actingMember;
   cb.hand.splice(cardIdx,1); cb.spentPile.push(cid);
   const ectx=makeEffectCtx(state,cb);
+  playSfx("cardPick");
   applyCardEffect(cid,ectx,targetEnemyIdx);
+  playSfx(["hit","hitDeep","hitArrow"][randomInt(0,2)]);
   if(member) addStress(state, member, card.cost);
   logLine(state,`▶ ${member?.name||"?"}: ${card.name} (stress +${card.cost})`);
 
@@ -913,6 +960,7 @@ function applyEnemyIntent(cb,e) {
     const blk=Math.min(tgt.block,inc),act=inc-blk;tgt.block=Math.max(0,tgt.block-blk);tgt.hp=Math.max(0,tgt.hp-act);
     logLine(state,`${e.name}->${tgt.name} ${inc}${blk?` (block ${blk})`:""}`);
     if(act>0)addStress(state,null,3);
+    if(blk>0&&act===0) playSfx("guardSuccess"); else if(blk>0&&act>0) playSfx("guardFail"); else playSfx("hit");
     const msg=`${e.name} ⚔ ${tgt.name}  ${act} dmg${blk?` (${blk} blocked)`:""}`;
     if(tgt.hp<=0){logLine(state,`✖ ${tgt.name} down!`);addStress(state,null,30);}
     return msg;
@@ -941,7 +989,9 @@ function completeNode(nd){if(!nd||!state.floor)return;state.floor.completedNodeI
 function proceedFloor(){if(state.run.floor>=5)return;const n=state.run.floor+1;logLine(state,`${state.run.floor}Floor→${n}Floor`);loadFloor(n);}
 function evalEnd(c){if(!c||!aliveParty(state).length)return"ENDING_FAIL";if(state.run.collapsedNames.length)return"ENDING_FAIL";if(state.run.consumedFoodCount===0)return"ENDING_TRUE";return"ENDING_LOOP";}
 function endSceneId(et){return et==="ENDING_TRUE"?"ending_true_cutscene":et==="ENDING_LOOP"?"ending_loop_cutscene":"ending_fail_cutscene";}
-function moveEnd(et){state.phase=PHASE.ENDING;state.combat=null;state.turnOrder=[];state.waitingForAlly=false;logLine(state,et==="ENDING_TRUE"?"True Ending!":et==="ENDING_LOOP"?"Looped.":"Failed.");renderAll();}
+function moveEnd(et){state.phase=PHASE.ENDING;state.combat=null;state.turnOrder=[];state.waitingForAlly=false;
+  if(et==="ENDING_TRUE")playBgm("endTrue");else if(et==="ENDING_LOOP")playBgm("endLoop");else playBgm("endFail");
+  logLine(state,et==="ENDING_TRUE"?"True Ending!":et==="ENDING_LOOP"?"Looped.":"Failed.");renderAll();}
 function handleFail(r){logLine(state,r);const et=evalEnd(false);playCutscene(endSceneId(et),()=>moveEnd(et));}
 
 /* ── Cutscenes ───────────────────────────────── */
@@ -971,12 +1021,6 @@ function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;st
 
 function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,["SETTINGS"]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
 function drawGrid(){ctx.save();ctx.strokeStyle="rgba(255,255,255,0.04)";ctx.lineWidth=1;for(let x=0;x<960;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,540);ctx.stroke();}for(let y=0;y<540;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(960,y);ctx.stroke();}ctx.restore();}
-const titleLogo = new Image();
-titleLogo.src = "../assets/ui/pixel/titles/title-faded-dungen-v10.png";
-
-const bgEndTrue = loadImg("../ending/bg-ending-true.png");
-const bgEndFail = loadImg("../ending/bg-ending-fail.png");
-const bgEndStress = loadImg("../ending/bg-ending-stress.png");
 function drawTitle(){
   drawBg(bgGameStart);
   if(titleLogo.complete&&titleLogo.naturalWidth>0){
