@@ -401,8 +401,6 @@ function renderAll() {
   if(tb) tb.textContent = state.combat ? `Turn ${state.combat.roundNumber}` : "";
   const sp = document.getElementById("stressPanel");
   if(sp) sp.style.display = state.phase === PHASE.MAP ? "flex" : "none";
-  const cr = document.getElementById("cheatRow");
-  if(cr) cr.style.display = state.phase === PHASE.MAP ? "flex" : "none";
   const bb = document.querySelector(".bottom-bar");
   const ht = document.querySelector(".hud-top");
   if (bb) {
@@ -443,7 +441,7 @@ function renderActions() {
   const H={
     [PHASE.TITLE]:()=>{head.textContent="";renderTitleButtons(row);},
     ["SETTINGS"]:()=>{head.textContent="";renderSettingsPanel(row);},
-    [PHASE.MAP]:()=>{head.textContent="Map";renderMapAct(row);},
+    [PHASE.MAP]:()=>{head.textContent="";renderMapAct(row);},
     [PHASE.COMBAT]:()=>{head.textContent="";renderCombatAct(row);},
     [PHASE.EVENT]:()=>{head.textContent="";renderEventAct(row);},
     [PHASE.BATTLE_REWARD]:()=>{head.textContent="";renderRewardAct(row);},
@@ -531,30 +529,6 @@ function renderMapAct(c) {
     }
   }
 
-  const cheatRow = document.createElement("div");
-  cheatRow.style.cssText = "position:absolute;top:6px;left:6px;display:flex;gap:4px;z-index:50;pointer-events:auto;";
-  const failBtn = btn("💀 Defeat", "danger", () => {
-    handleFail("Cheat: forced defeat.");
-  });
-  cheatRow.appendChild(failBtn);
-  const bossBtn = btn("👑 Boss Clear", "danger", () => {
-    if(!CUTSCENES) CUTSCENES=buildCutscenes();
-    const floorRef=state.floor, runFloor=run.floor;
-    playCutscene(`boss_defeat_floor_${runFloor}`,()=>{
-      if(floorRef&&floorRef.bossNode) floorRef.completedNodeIds.add(floorRef.bossNode.id);
-      if(runFloor>=5){const et=evalEnd(true);playCutscene(endSceneId(et),()=>moveEnd(et));}
-      else{state.phase=PHASE.FLOOR_REWARD;state.combat=null;renderAll();}
-    });
-  });
-  cheatRow.appendChild(bossBtn);
-  const stressBtn = btn("😰 +7 Stress", "", () => {
-    addStress(state,null,7); renderAll();
-  });
-  cheatRow.appendChild(stressBtn);
-  const vp=document.getElementById("gameViewport");
-  const old=document.getElementById("cheatRow");if(old)old.remove();
-  cheatRow.id="cheatRow";
-  vp.appendChild(cheatRow);
 }
 
 function renderCombatAct(c) {
