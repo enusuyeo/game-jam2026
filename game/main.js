@@ -19,6 +19,7 @@ titleLogo.src = "../assets/ui/pixel/titles/title-faded-dungen-v10.png";
 const PHASE = {
   TITLE: "TITLE", MAP: "MAP", COMBAT: "COMBAT", EVENT: "EVENT",
   BATTLE_REWARD: "BATTLE_REWARD", BATTLE_REWARD_ASSIGN: "BATTLE_REWARD_ASSIGN",
+  BATTLE_REWARD_DISCARD: "BATTLE_REWARD_DISCARD",
   FLOOR_REWARD: "FLOOR_REWARD", FLOOR_REWARD_PICK: "FLOOR_REWARD_PICK",
   FLOOR_REWARD_REMOVE: "FLOOR_REWARD_REMOVE",
   CUTSCENE: "CUTSCENE", ENDING: "ENDING",
@@ -39,11 +40,17 @@ const EVENT_VARIANTS = [
     { id:"food_altar", hint:"Offer to altar", label: "Altar offering: Gold +30, Binding +1, Stress +9", apply(s) { s.run.gold+=30; s.run.consumedFoodCount+=1; addStress(s,null,9); logLine(s,"Gained coins."); }},
     { id:"food_meditate", hint:"Meditate", label: "Meditate: HP +5, Stress -30", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+5)});reduceStress(null,30); logLine(s,"Recovered."); }},
   ]},
-  { title: "Blackstone Exchange", text: "A shadow merchant whispers.", options: [
+  { title: "Blackstone Exchange", text: "A shadow merchant whispers.", npc:"../assets/sprites/black-market-dealer/black-market-dealer-half-right.png", npcFlip:true, npcScale:4, npcOffsetX:80, options: [
     { id:"shop_remove", hint:"Pay gold", label: "20 Gold: Remove a card", apply(s) { if(s.run.gold<20){logLine(s,"Not enough gold.");return;} s.run.gold-=20; const t=aliveParty(s).find(m=>m.deck.length>0); if(t){t.deck.shift();logLine(s,`${t.name} card removed.`);} }},
     { id:"shop_steroid", hint:"Take injection", label: "Boost injection: Attack +1, Stress +24", apply(s) { s.run.attackBonus+=1; addStress(s,null,24); logLine(s,"Attack +1."); }},
     { id:"shop_contract", hint:"Break contract", label: "Break contract: HP -5, Gold +25", apply(s) { aliveParty(s).forEach(m=>m.hp=Math.max(1,m.hp-5)); s.run.gold+=25; logLine(s,"Gold +25."); }},
     { id:"shop_ignore", hint:"Ignore", label: "Ignore", apply(s) { logLine(s,"Walked past."); }},
+  ]},
+  { title: "Alchemist's Lab", text: "Bubbling flasks line the shelves.", options: [
+    { id:"alch_heal", hint:"Drink potion", label: "Healing potion: All HP +15, Stress +6", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+15)});addStress(s,null,6); logLine(s,"Healed."); }},
+    { id:"alch_enhance", hint:"Enhance cards", label: "Card draw +3, Stress +12", apply(s) { if(s.combat) drawCardsFromPile(s.combat,3); else { const combined=[]; aliveParty(s).forEach(m=>combined.push(...m.deck.slice(0,1))); } addStress(s,null,12); logLine(s,"Drew extra cards."); }},
+    { id:"alch_purify", hint:"Purify binding", label: "Purify: Binding -1, HP -10", apply(s) { if(s.run.consumedFoodCount>0)s.run.consumedFoodCount-=1; aliveParty(s).forEach(m=>{m.hp=Math.max(1,m.hp-10)}); logLine(s,"Purified."); }},
+    { id:"alch_leave", hint:"Leave quietly", label: "Leave quietly", apply(s) { logLine(s,"Left the lab."); }},
   ]},
 ];
 
@@ -74,6 +81,31 @@ let activeEffect = null;
 const enemySprite = new Image();
 enemySprite.src = "../assets/ui/pixel/characters/sideview/reaper2-sideview-sprite.png";
 const ENEMY_SPRITE = { fw: 256, fh: 768, cols: 4, seq: [0, 0, 1, 1] };
+
+const BOSS_SPRITE_PATHS = {
+  1: "../assets/sprites/bosses/floor1/chain-jailer-half-right.png",
+  2: "../assets/sprites/bosses/floor2/rift-guardian-v8-chat-half-right-brutal.png",
+  3: "../assets/sprites/bosses/floor3/memory-executor-v6-clean-papers-cutout.png",
+  4: "../assets/sprites/bosses/floor4/boss4.png",
+  5: "../assets/sprites/bosses/floor5/gatekeeper-v15-dark-seal-souls-half.png",
+};
+const BOSS_SPRITE_SHEETS = {
+  1: { path: "../assets/sprites/bosses/floor1/pixel-side/idle-breathe/chain-jailer-idle-breathe-sheet.png", fw: 1024, fh: 1024, cols: 4, seq: [0, 1, 2, 3] },
+  2: { path: "../assets/sprites/bosses/floor2/pixel-front/idle-core/rift-guardian-idle-core-sheet.png", fw: 896, fh: 1200, cols: 4, seq: [0, 1, 2, 3] },
+};
+const bossImgCache = {};
+function getBossImg(floor) {
+  const path = BOSS_SPRITE_PATHS[floor];
+  if (!path) return null;
+  if (!bossImgCache[path]) { const img = new Image(); img.src = path; bossImgCache[path] = img; }
+  return bossImgCache[path];
+}
+function getBossSpriteSheet(floor) {
+  const cfg = BOSS_SPRITE_SHEETS[floor];
+  if (!cfg) return null;
+  if (!bossImgCache[cfg.path]) { const img = new Image(); img.src = cfg.path; bossImgCache[cfg.path] = img; }
+  return { img: bossImgCache[cfg.path], ...cfg };
+}
 
 const hpBarFrame = new Image();
 const combatLogBg = new Image();
@@ -137,6 +169,7 @@ function getTgtX(tgt) {
 }
 const nodeBasicImg = new Image(); nodeBasicImg.src = MAP_UI + "basic-map-node-v01.png";
 const nodeBossImg = new Image(); nodeBossImg.src = MAP_UI + "node-boss.png";
+const bossCutsceneBottomUI = new Image(); bossCutsceneBottomUI.src = "../assets/ui/pixel/selection_base_ui.png";
 const nodeEventImg = new Image(); nodeEventImg.src = MAP_UI + "node-event.png";
 const iconArrowDown = new Image(); iconArrowDown.src = MAP_UI + "icon-arrow-down.png";
 
@@ -177,7 +210,6 @@ function getCombatBg() {
 
 /* ── DOM ─────────────────────────────────────── */
 const hudPanel = document.getElementById("hudPanel");
-const descriptionPanel = document.getElementById("descriptionPanel");
 const actionsPanel = document.getElementById("actionsPanel");
 const logPanel = document.getElementById("logPanel") || document.createElement("div");
 const overlayHint = document.getElementById("overlayHint");
@@ -187,7 +219,7 @@ const ctx = canvas.getContext("2d");
 /* ── State ───────────────────────────────────── */
 const state = {
   phase: PHASE.TITLE, run: null, floor: null, combat: null,
-  eventContext: null, rewardChoices: [], pendingRewardCard: null, removeMember: null,
+  eventContext: null, rewardChoices: [], pendingRewardCard: null, pendingRewardMember: null, removeMember: null,
   activeScene: null, activeSceneIndex: 0, activeSceneOnEnd: null,
   turnOrder: [], currentActionIdx: 0, actingMember: null, waitingForAlly: false, discarding: false,
   diceRolling: { active: false, startTime: 0, settled: false, finalSpeeds: null },
@@ -304,6 +336,16 @@ function makeEffectCtx(s,cb) { return { state:s,combat:cb, aliveParty:()=>aliveP
 function initPointerEvents() {
   document.addEventListener("pointermove", onPtrMove);
   document.addEventListener("pointerup", onPtrUp);
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input") || e.target.closest("textarea")) return;
+    if (e.key === "b" && state.phase === PHASE.MAP && state.run && state.floor && state.run.floor < 5) {
+      proceedFloor();
+    }
+    if (e.key === "c" && state.phase === PHASE.MAP && state.run && state.floor) {
+      const nd = state.floor.grid.flat().find(n => n.type === "boss") || { id: "cheat-boss", type: "boss", floor: state.run.floor };
+      playCutscene(`boss_intro_floor_${state.run.floor}`, () => startCombat(nd, true));
+    }
+  });
 }
 
 function onCardDragStart(e, cardIdx) {
@@ -385,7 +427,7 @@ function screenToCanvas(sx, sy) {
 
 function getEnemyAtPos(x, y) {
   if(!state.combat) return -1;
-  const enW=150, enStartX=500, enGap=-10, enH=480, ey=590;
+  const enW=150, enStartX=500, enGap=-10, enH=480, ey=595;
   for(let i=0;i<state.combat.enemies.length;i++) {
     const e=state.combat.enemies[i]; if(e.hp<=0)continue;
     const ex=enStartX+i*(enW+enGap);
@@ -432,7 +474,7 @@ function addChip(p,l,v){const el=document.createElement("div");el.className="hud
 function addStyledChip(p,l,v){const el=document.createElement("div");el.className="hud-styled-chip";el.textContent=`${l}: ${v}`;p.appendChild(el);}
 
 function renderDesc() {
-  descriptionPanel.innerHTML=""; overlayHint.textContent="";
+  overlayHint.textContent="";
 }
 
 function renderActions() {
@@ -446,6 +488,7 @@ function renderActions() {
     [PHASE.EVENT]:()=>{head.textContent="";renderEventAct(row);},
     [PHASE.BATTLE_REWARD]:()=>{head.textContent="";renderRewardAct(row);},
     [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="";renderAssignAct(row);},
+    [PHASE.BATTLE_REWARD_DISCARD]:()=>{head.textContent="Discard a card to make room";renderBattleRewardDiscardAct(row);},
     [PHASE.FLOOR_REWARD]:()=>{head.textContent="";renderFloorAct(row);},
     [PHASE.FLOOR_REWARD_PICK]:()=>{head.textContent="";renderFloorPickAct(row);},
     [PHASE.FLOOR_REWARD_REMOVE]:()=>{head.textContent="";renderFloorRemoveAct(row);},
@@ -548,7 +591,7 @@ function renderCombatAct(c) {
       const card = CARD_LIBRARY[cid];
       const el = document.createElement("div");
       el.className = "visual-card self-card";
-      el.innerHTML = `<div class="vc-cost">${card.cost}</div><div class="vc-name">${card.name}</div><div class="vc-type" style="color:#ff8866">Discard</div><div class="vc-desc">${card.text}</div><div class="vc-hint">Click to discard</div>`;
+      el.innerHTML = `<div class="vc-cost">Stress +${card.cost}</div><div class="vc-name">${card.name}</div><div class="vc-type" style="color:#ff8866">Discard</div><div class="vc-desc">${card.text}</div><div class="vc-hint">Click to discard</div>`;
       el.onclick = () => discardCard(i);
       cardRow.appendChild(el);
     });
@@ -572,7 +615,7 @@ function renderCombatAct(c) {
     const typeColor = card.type === "attack" ? "#ff8866" : "#66ccff";
     const typeLabel = card.type === "attack" ? "Attack" : "Skill";
     el.innerHTML = `
-      <div class="vc-cost" title="Stress +${card.cost}">💀${card.cost}</div>
+      <div class="vc-cost">Stress +${card.cost}</div>
       <div class="vc-name">${card.name}</div>
       <div class="vc-type" style="color:${typeColor}">${typeLabel}</div>
       <div class="vc-desc">${card.text}</div>
@@ -606,8 +649,7 @@ function renderEventAct(c) {
   const grid = document.createElement("div");
   grid.className = "event-choice-grid";
   v.options.forEach(o => {
-    const seen = o.id ? isEventSeen(o.id) : true;
-    const displayLabel = seen ? o.label : (o.hint || "???");
+    const displayLabel = o.label || o.hint || "???";
     const b = document.createElement("button");
     b.className = "event-choice-btn";
     b.textContent = displayLabel;
@@ -630,12 +672,46 @@ function renderRewardAct(c) {
 }
 function renderAssignAct(c) {
   const cid=state.pendingRewardCard;if(!cid)return;const card=CARD_LIBRARY[cid];
-  const el=aliveParty(state).filter(m=>m.deck.length<MAX_DECK_SIZE);
-  if(!el.length){logLine(state,"Deck full.");state.run.gold+=10;state.pendingRewardCard=null;completeNode(state.combat.node);return;}
+  const el=aliveParty(state);
   const wrap=document.createElement("div");wrap.className="event-choice-wrap";
   const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
-  el.forEach(m=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${m.name} (${m.deck.length}/${MAX_DECK_SIZE})`;b.onclick=()=>{m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);state.pendingRewardCard=null;completeNode(state.combat.node);};grid.appendChild(b);});
+  el.forEach(m=>{
+    const b=document.createElement("button");
+    b.className="event-choice-btn";
+    b.textContent=m.deck.length>=MAX_DECK_SIZE?`${m.name} (full — discard 1)`:`${m.name} (${m.deck.length}/${MAX_DECK_SIZE})`;
+    b.onclick=()=>{
+      if(m.deck.length<MAX_DECK_SIZE){
+        m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);
+        state.pendingRewardCard=null;completeNode(state.combat.node);
+      }else{
+        state.pendingRewardMember=m;state.phase=PHASE.BATTLE_REWARD_DISCARD;renderAll();
+      }
+    };
+    grid.appendChild(b);
+  });
   const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.BATTLE_REWARD;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderBattleRewardDiscardAct(c) {
+  const m=state.pendingRewardMember,cid=state.pendingRewardCard;if(!m||!cid)return;
+  const card=CARD_LIBRARY[cid];
+  const unique=[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"en"));
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  unique.forEach(rid=>{
+    const cnt=m.deck.filter(x=>x===rid).length;
+    const b=document.createElement("button");
+    b.className="event-choice-btn";
+    b.textContent=`${CARD_LIBRARY[rid].name} x${cnt}`;
+    b.onclick=()=>{
+      const idx=m.deck.indexOf(rid);if(idx>=0)m.deck.splice(idx,1);
+      m.deck.push(cid);state.run.gold+=10;
+      logLine(state,`${m.name}: discarded ${CARD_LIBRARY[rid].name}, added ${card.name}.`);
+      state.pendingRewardCard=null;state.pendingRewardMember=null;completeNode(state.combat.node);
+    };
+    grid.appendChild(b);
+  });
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.pendingRewardMember=null;state.phase=PHASE.BATTLE_REWARD_ASSIGN;renderAll();};grid.appendChild(cancel);
   wrap.appendChild(grid);c.appendChild(wrap);
 }
 function renderFloorAct(c) {
@@ -685,7 +761,7 @@ function getNodeVisitInfo(nodeId){ return loadNodeVisits()[nodeId]||null; }
 function loadFloor(fn){
   state.run.floor=fn; state.floor=genFloor(fn);
   state.phase=PHASE.MAP; state.combat=null; state.eventContext=null;
-  state.rewardChoices=[]; state.pendingRewardCard=null;
+  state.rewardChoices=[]; state.pendingRewardCard=null; state.pendingRewardMember=null;
   state.turnOrder=[]; state.waitingForAlly=false;
   playBgm(fn);
   renderAll();
@@ -918,15 +994,34 @@ function showDeckView() {
   if(!state.combat||!state.actingMember) return;
   const member = state.actingMember;
   const cb = state.combat;
-  const deckCards = member.deck.reduce((acc, cid) => { acc[cid]=(acc[cid]||0)+1; return acc; }, {});
-  const lines = Object.entries(deckCards).map(([cid,cnt]) => {
-    const card = CARD_LIBRARY[cid];
-    return `${card.name} x${cnt} (💀${card.cost})`;
-  }).join("\n");
   const handCount = cb.hand.length;
   const drawCount = cb.drawPile.length;
   const spentCount = cb.spentPile.length;
-  alert(`[${member.name}'s Deck] ${member.deck.length} cards\n${lines}\n\n─── Combat ───\nHand: ${handCount} │ Draw Pile: ${drawCount} │ Spent: ${spentCount}`);
+  const drawCards = cb.drawPile.reduce((acc, cid) => { acc[cid]=(acc[cid]||0)+1; return acc; }, {});
+  const drawLines = Object.entries(drawCards).map(([cid,cnt]) => {
+    const card = CARD_LIBRARY[cid];
+    return `${card.name} x${cnt} (Stress +${card.cost})`;
+  }).join("\n") || "—";
+  const viewport = document.getElementById("gameViewport");
+  const existing = viewport.querySelector(".deck-overlay");
+  if(existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "deck-overlay";
+  overlay.innerHTML = `
+    <div class="deck-overlay-panel">
+      <h3>${member.name} — Remaining Cards</h3>
+      <div class="deck-overlay-list">
+        <div><strong>Draw Pile:</strong> ${drawCount} cards</div>
+        <div style="margin-top:8px;padding-left:8px;">${drawLines.replace(/\n/g,"<br>")}</div>
+        <div style="margin-top:12px;"><strong>Hand:</strong> ${handCount} │ <strong>Spent:</strong> ${spentCount}</div>
+      </div>
+      <button class="deck-overlay-close">Close</button>
+    </div>
+  `;
+  overlay.querySelector(".deck-overlay-close").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
+  overlay.querySelector(".deck-overlay-panel").onclick = (e) => e.stopPropagation();
+  viewport.appendChild(overlay);
 }
 
 function allyPass() {
@@ -1014,7 +1109,7 @@ function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;st
    Canvas Drawing — 960×540 (16:9)
    ══════════════════════════════════════════════════ */
 
-function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,["SETTINGS"]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
+function drawScene(){const run=state.run;const fc=run?FLOOR_COLORS[run.floor-1]:[30,34,42];const g=ctx.createLinearGradient(0,0,960,540);g.addColorStop(0,`rgb(${fc[0]-18},${fc[1]-16},${fc[2]-18})`);g.addColorStop(1,`rgb(${fc[0]},${fc[1]},${fc[2]})`);ctx.fillStyle=g;ctx.fillRect(0,0,960,540);drawGrid();const fn={[PHASE.TITLE]:drawTitle,["SETTINGS"]:drawTitle,[PHASE.MAP]:drawMap,[PHASE.COMBAT]:drawCombat,[PHASE.BATTLE_REWARD]:drawCombat,[PHASE.BATTLE_REWARD_ASSIGN]:drawCombat,[PHASE.BATTLE_REWARD_DISCARD]:drawCombat,[PHASE.EVENT]:drawEvent,[PHASE.FLOOR_REWARD]:drawFloorRw,[PHASE.FLOOR_REWARD_PICK]:drawFloorRw,[PHASE.FLOOR_REWARD_REMOVE]:drawFloorRw,[PHASE.CUTSCENE]:drawCutscene,[PHASE.ENDING]:drawEnding}[state.phase];if(fn)fn();}
 function drawGrid(){ctx.save();ctx.strokeStyle="rgba(255,255,255,0.04)";ctx.lineWidth=1;for(let x=0;x<960;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,540);ctx.stroke();}for(let y=0;y<540;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(960,y);ctx.stroke();}ctx.restore();}
 function drawTitle(){
   drawBg(bgGameStart);
@@ -1076,13 +1171,15 @@ function drawMap(){
       }
     }
   }
+
+  drawTextOutline("You can go to adjacent nodes",480,515,12,"#8a9bb0","#000",1,"center");
 }
 
 function drawCombat(){
   const run=state.run,cb=state.combat;if(!run)return;
   drawBg(getCombatBg());
   const charW=150, charH=280, charGap=-10, partyStartX=10;
-  const partyCy=440;
+  const partyCy=455;
   const commonArkeH=charH*(charSprites.Arke.scale||1);
   const commonBarY=partyCy+4;
   run.party.forEach((m,i)=>{
@@ -1150,35 +1247,48 @@ function drawCombat(){
   if(cb){
     const enW=150, enH=480, enStartX=500, enGap=-10;
     cb.enemies.forEach((e,i)=>{
-      const ex=enStartX+i*(enW+enGap), ey=590;
+      const ex=enStartX+i*(enW+enGap), ey=595;
       const alive=e.hp>0, hl=highlightedEnemy===i;
       if(!alive) return;
 
       ctx.save();
-      if(enemySprite.complete&&enemySprite.naturalWidth>0){
+      const bossSheet=cb.isBoss?getBossSpriteSheet(run.floor):null;
+      const useBossSheet=bossSheet&&bossSheet.img.complete&&bossSheet.img.naturalWidth>0;
+      if(useBossSheet){
+        const frameIdx=bossSheet.seq[spriteFrame%bossSheet.seq.length];
+        const sx=frameIdx*bossSheet.fw,sy=0;
+        const scaleW=enW/bossSheet.fw,scaleH=enH/bossSheet.fh;
+        let scale=Math.min(scaleW,scaleH);
+        if(run.floor===1||run.floor===2){scale*=1.8;}
+        const drawW=bossSheet.fw*scale,drawH=bossSheet.fh*scale;
+        const drawX=ex+(enW-drawW)/2+(run.floor===1?10:run.floor===2?15:0);
+        const drawY=(run.floor===1)?ey-drawH-110:(run.floor===2)?ey-drawH-100:ey-drawH;
+        ctx.drawImage(bossSheet.img,sx,sy,bossSheet.fw,bossSheet.fh,drawX,drawY,drawW,drawH);
+      } else if(enemySprite.complete&&enemySprite.naturalWidth>0){
         const frameIdx=ENEMY_SPRITE.seq[spriteFrame%ENEMY_SPRITE.seq.length];
-        const sx=frameIdx*ENEMY_SPRITE.fw, sy=0;
+        const sx=frameIdx*ENEMY_SPRITE.fw,sy=0;
         const ratio=ENEMY_SPRITE.fw/ENEMY_SPRITE.fh;
-        const drawH=enH, drawW=drawH*ratio;
+        const drawH=enH,drawW=drawH*ratio;
         const drawX=ex+(enW-drawW)/2;
-        ctx.save();
         ctx.translate(drawX+drawW,ey-drawH);
         ctx.scale(-1,1);
         ctx.drawImage(enemySprite,sx,sy,ENEMY_SPRITE.fw,ENEMY_SPRITE.fh,0,0,drawW,drawH);
-        ctx.restore();
       } else {
         drawPanel(ex,ey-enH,enW,enH,`rgba(40,16,18,0.7)`);
       }
       ctx.restore();
 
-      const eNameY=partyCy-commonArkeH-18;
+      const uiOffsetX=(cb.isBoss&&run.floor===1)?75:(cb.isBoss&&run.floor===2)?50:0;
+      const exUI=ex+uiOffsetX;
+      const eNameYBase=partyCy-commonArkeH-18;
+      const eNameY=(cb.isBoss&&run.floor===1)?eNameYBase-15:(cb.isBoss&&run.floor===2)?eNameYBase-70:eNameYBase;
       if(hl){
-        drawText("▼",ex+enW/2,eNameY-20,18,"#ff6b6b","center");
+        drawText("▼",exUI+enW/2,eNameY-20,18,"#ff6b6b","center");
       }
 
-      drawTextOutline(e.name,ex+enW/2,eNameY,11,"#ffb7b7","#000",2,"center");
+      drawTextOutline(e.name,exUI+enW/2,eNameY,11,"#ffb7b7","#000",2,"center");
 
-      const eBarW=charW, eBarH=Math.round(charW/2.7), eBarX=ex+(enW-charW)/2, eBarY=commonBarY;
+      const eBarW=charW, eBarH=Math.round(charW/2.7), eBarX=exUI+(enW-charW)/2, eBarY=commonBarY;
       const ePadX=Math.round(eBarW*0.08), ePadY=Math.round(eBarH*0.35);
       const eFillX=eBarX+ePadX, eFillY=eBarY+ePadY, eFillMaxW=eBarW-ePadX*2, eFillH=eBarH-ePadY*2;
       ctx.fillStyle="rgba(20,10,10,0.8)";
@@ -1192,12 +1302,12 @@ function drawCombat(){
       const eSpdY=eBarY+eBarH+4;
       if(state.diceRolling.active&&alive){
         const key=`enemy_${i}`,fs=state.diceRolling.finalSpeeds;
-        if(state.diceRolling.settled) drawTextOutline(`🎲${fs.get(key)}`,ex+enW/2,eSpdY,11,"#ffc857","#000",2,"center");
-        else drawTextOutline(`🎲${randomInt(1,6)}`,ex+enW/2,eSpdY,11,"#ccc","#000",2,"center");
-      } else if(alive&&e.speed>0) { drawTextOutline(`SPD ${e.speed}`,ex+enW/2,eSpdY,9,"#cc8888","#000",2,"center"); }
+        if(state.diceRolling.settled) drawTextOutline(`🎲${fs.get(key)}`,exUI+enW/2,eSpdY,11,"#ffc857","#000",2,"center");
+        else drawTextOutline(`🎲${randomInt(1,6)}`,exUI+enW/2,eSpdY,11,"#ccc","#000",2,"center");
+      } else if(alive&&e.speed>0) { drawTextOutline(`SPD ${e.speed}`,exUI+enW/2,eSpdY,9,"#cc8888","#000",2,"center"); }
 
-      if(e.block>0) drawTextOutline(`🛡${e.block}`,ex+enW/2,eSpdY+14,10,"#5da4e6","#000",2,"center");
-      if(e.bleed>0) drawTextOutline(`🩸${e.bleed}`,ex+enW/2,eSpdY+26,10,"#cc6666","#000",2,"center");
+      if(e.block>0) drawTextOutline(`🛡${e.block}`,exUI+enW/2,eSpdY+14,10,"#5da4e6","#000",2,"center");
+      if(e.bleed>0) drawTextOutline(`🩸${e.bleed}`,exUI+enW/2,eSpdY+26,10,"#cc6666","#000",2,"center");
     });
 
 
@@ -1220,15 +1330,72 @@ function drawCombat(){
     }}
 }
 
-function drawEvent(){if(!state.eventContext)return;const evIdx=EVENT_VARIANTS.indexOf(state.eventContext.variant);drawBg(bgEvent[evIdx>=0?evIdx%bgEvent.length:0]);const v=state.eventContext.variant;drawPanel(180,120,600,200,"rgba(14,29,33,0.75)");drawText(v.title,210,170,30,"#89f6d9","left");drawText(v.text,210,220,18,"#e0f0ff","left");}
+const npcImgCache={};
+function getNpcImg(src){if(!src)return null;if(!npcImgCache[src]){const img=new Image();img.src=src;npcImgCache[src]=img;}return npcImgCache[src];}
+
+function drawEvent(){
+  if(!state.eventContext)return;
+  const evIdx=EVENT_VARIANTS.indexOf(state.eventContext.variant);
+  drawBg(bgEvent[evIdx>=0?evIdx%bgEvent.length:0]);
+  const v=state.eventContext.variant;
+
+  const npcImg=getNpcImg(v.npc);
+  if(npcImg&&npcImg.complete&&npcImg.naturalWidth>0){
+    const baseW=220;
+    const targetScale=v.npcScale??2;
+    const maxH=480;
+    let nw=baseW*targetScale,nh=nw*(npcImg.naturalHeight/npcImg.naturalWidth);
+    if(nh>maxH){const s=maxH/nh;nw*=s;nh=maxH;}
+    const nx=(480-nw/2)+(v.npcOffsetX??0), ny=540-nh-18;
+    ctx.save();
+    if(v.npcFlip){ctx.translate(nx+nw,ny);ctx.scale(-1,1);ctx.drawImage(npcImg,0,0,nw,nh);}
+    else ctx.drawImage(npcImg,nx,ny,nw,nh);
+    ctx.restore();
+  }
+
+  const titleBg=new Image();titleBg.src="../assets/ui/pixel/buttons/select_options.png";
+  if(titleBg.complete&&titleBg.naturalWidth>0){
+    const tw=220,th=tw/5.3;
+    ctx.drawImage(titleBg,10,10,tw,th);
+    drawTextOutline(v.title,10+tw/2,10+th/2,13,"#ffe8a0","#000",2,"center");
+  } else {
+    drawTextOutline(v.title,120,28,16,"#ffe8a0","#000",2,"center");
+  }
+}
 function drawFloorRw(){drawBg(bgFloorBoss[state.run?.floor]||bgFloorBoss[1]);drawTextOutline(`Floor ${state.run.floor} Cleared`,480,200,36,"#f6cd89","#000",4,"center");drawTextOutline("Choose Reward",480,260,20,"#e8e0d0","#000",2,"center");}
 function drawCutscene(){
   const sc=state.activeScene;if(!sc)return;
   const fr=sc.frames[Math.min(state.activeSceneIndex,sc.frames.length-1)];
   if(fr.bg) drawBg(fr.bg);
   else { const[r,g2,b]=fr.color;ctx.fillStyle=`rgba(${r},${g2},${b},0.3)`;ctx.fillRect(0,0,960,540); }
-  drawTextOutline(fr.headline,480,340,28,"#f8eac1","#000",3,"center");
-  drawTextOutline(fr.line,480,390,18,"#f4f7fb","#000",2,"center");
+  const fl=sc.bossIntroFloor;
+  if(fl){
+    const bossImg=getBossImg(fl);
+    if(bossImg&&bossImg.complete&&bossImg.naturalWidth>0){
+      const baseW=220,targetScale=4,maxH=480;
+      let nw=baseW*targetScale,nh=nw*(bossImg.naturalHeight/bossImg.naturalWidth);
+      if(nh>maxH){const s=maxH/nh;nw*=s;nh=maxH;}
+      const nx=480-nw/2+80,ny=540-nh-18;
+      ctx.save();
+      ctx.translate(nx+nw,ny);
+      ctx.scale(-1,1);
+      ctx.drawImage(bossImg,0,0,bossImg.naturalWidth,bossImg.naturalHeight,0,0,nw,nh);
+      ctx.restore();
+    }
+  }
+  if (fl && bossCutsceneBottomUI.complete && bossCutsceneBottomUI.naturalWidth > 0) {
+    const uiW = 650;
+    const uiH = uiW / 3.08;
+    const uiLeft = 480 - uiW / 2;
+    const uiTop = 540 - uiH;
+    ctx.drawImage(bossCutsceneBottomUI, uiLeft, uiTop, uiW, uiH);
+    const textCenterY = uiTop + uiH * 0.5;
+    drawTextOutline(fr.headline, 480, textCenterY - 28, 28, "#f8eac1", "#000", 3, "center");
+    drawTextOutline(fr.line, 480, textCenterY + 12, 18, "#f4f7fb", "#000", 2, "center");
+  } else {
+    drawTextOutline(fr.headline, 480, 340, 28, "#f8eac1", "#000", 3, "center");
+    drawTextOutline(fr.line, 480, 390, 18, "#f4f7fb", "#000", 2, "center");
+  }
 }
 function drawTextOutline(t,x,y,s,fill,stroke,w,a="left"){
   ctx.font=`bold ${s}px 'New Rocker',Almendra,serif`;ctx.textAlign=a;ctx.textBaseline="middle";
@@ -1278,6 +1445,7 @@ function buildCutscenes(){
     const bossBg=bgFloorBoss[fl]||bgFloorBoss[1];
     sc[`boss_intro_floor_${fl}`]={
       title:`Floor ${fl} Boss Entry`,
+      bossIntroFloor:fl,
       frames:[
         {headline:`${BOSS_NAMES[fl-1]} Appears`,line:`The gate of Floor ${fl} opens.`,color:c,bg:bossBg},
         {headline:"Prepare for Final Battle",line:"Steady your breath.",color:c,bg:bossBg},

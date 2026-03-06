@@ -718,6 +718,60 @@ button:disabled {
   display: none;
 }
 
+/* ── Deck Detail Overlay ─────────────────────── */
+
+.deck-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.deck-overlay-panel {
+  background: url("../assets/ui/pixel/buttons/select_options.png") center/100% 100% no-repeat;
+  width: 520px;
+  aspect-ratio: 3.08 / 1;
+  padding: 32px 44px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.deck-overlay-panel h3 {
+  font-family: "New Rocker", "Almendra", serif;
+  font-size: 16px;
+  color: #ffe8a0;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.deck-overlay-list {
+  font-family: "Almendra", serif;
+  font-size: 12px;
+  color: #d0dae8;
+  line-height: 1.6;
+}
+
+.deck-overlay-close {
+  margin-top: 14px;
+  width: 100%;
+  padding: 8px 16px;
+  font-family: "New Rocker", "Almendra", serif;
+  font-size: 12px;
+  color: #ffe8a0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.deck-overlay-close:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+
 /* ── Scrollbar ───────────────────────────────── */
 
 ::-webkit-scrollbar {
