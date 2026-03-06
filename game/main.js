@@ -337,6 +337,10 @@ function renderAll() {
   renderHUD(); renderDesc(); renderActions(); renderLogs();
   const tb = document.getElementById("turnBadge");
   if(tb) tb.textContent = state.combat ? `Turn ${state.combat.roundNumber}` : "";
+  const sp = document.getElementById("stressPanel");
+  if(sp) sp.style.display = state.phase === PHASE.MAP ? "flex" : "none";
+  const cr = document.getElementById("cheatRow");
+  if(cr) cr.style.display = state.phase === PHASE.MAP ? "flex" : "none";
   const bb = document.querySelector(".bottom-bar");
   const ht = document.querySelector(".hud-top");
   if (bb) {
@@ -351,15 +355,21 @@ function renderHUD() {
   hudPanel.innerHTML=""; const run=state.run;
   if(!run){return;}
   if(!state.combat){
-    addChip(hudPanel,"Floor",`${run.floor}/5`); addChip(hudPanel,"Gold",`${run.gold}`);
-    addChip(hudPanel,"Binding",`${run.consumedFoodCount}`);
-    addChip(hudPanel,"Stress",`${run.stress}/${STRESS_LIMIT}`);
-    if(run.attackBonus)addChip(hudPanel,"ATK",`+${run.attackBonus}`);
-  }
-  if(state.combat){const s2=document.createElement("div");s2.className="hud-separator";hudPanel.appendChild(s2);
+    const leftCol=document.createElement("div");leftCol.className="hud-left-col";
+    addStyledChip(leftCol,"Floor",`${run.floor}/5`);
+    addStyledChip(leftCol,"Gold",`${run.gold}`);
+    addStyledChip(leftCol,"Binding",`${run.consumedFoodCount}`);
+    hudPanel.appendChild(leftCol);
+    let stressEl=document.getElementById("stressPanel");
+    if(!stressEl){stressEl=document.createElement("div");stressEl.id="stressPanel";stressEl.className="hud-stress-panel";document.getElementById("gameViewport").appendChild(stressEl);}
+    const stPct=Math.min(run.stress,STRESS_LIMIT)/STRESS_LIMIT*100;
+    const stColor=stPct<30?"#884422":stPct<60?"#cc4422":"#ff2222";
+    stressEl.innerHTML=`<div class="stress-fill" style="width:${stPct}%;background:${stColor}"></div><span class="stress-label">Stress ${run.stress}/${STRESS_LIMIT}</span>`;
+    stressEl.style.display="flex";
   }
 }
 function addChip(p,l,v){const el=document.createElement("div");el.className="hud-chip";el.innerHTML=`<span class="label">${l}</span><span class="val">${v}</span>`;p.appendChild(el);}
+function addStyledChip(p,l,v){const el=document.createElement("div");el.className="hud-styled-chip";el.textContent=`${l}: ${v}`;p.appendChild(el);}
 
 function renderDesc() {
   descriptionPanel.innerHTML=""; overlayHint.textContent="";
@@ -461,17 +471,12 @@ function renderMapAct(c) {
     }
   }
 
-  const skipBtn = btn("⏭ Skip Stage", "", () => {
-    if(run.floor>=5) return;
-    loadFloor(run.floor+1);
-  });
-  skipBtn.style.pointerEvents = "auto";
-  c.appendChild(skipBtn);
+  const cheatRow = document.createElement("div");
+  cheatRow.style.cssText = "position:absolute;top:6px;left:6px;display:flex;gap:4px;z-index:50;pointer-events:auto;";
   const failBtn = btn("💀 Defeat", "danger", () => {
     handleFail("Cheat: forced defeat.");
   });
-  failBtn.style.pointerEvents = "auto";
-  c.appendChild(failBtn);
+  cheatRow.appendChild(failBtn);
   const bossBtn = btn("👑 Boss Clear", "danger", () => {
     if(!CUTSCENES) CUTSCENES=buildCutscenes();
     const floorRef=state.floor, runFloor=run.floor;
@@ -481,8 +486,15 @@ function renderMapAct(c) {
       else{state.phase=PHASE.FLOOR_REWARD;state.combat=null;renderAll();}
     });
   });
-  bossBtn.style.pointerEvents = "auto";
-  c.appendChild(bossBtn);
+  cheatRow.appendChild(bossBtn);
+  const stressBtn = btn("😰 +7 Stress", "", () => {
+    addStress(state,null,7); renderAll();
+  });
+  cheatRow.appendChild(stressBtn);
+  const vp=document.getElementById("gameViewport");
+  const old=document.getElementById("cheatRow");if(old)old.remove();
+  cheatRow.id="cheatRow";
+  vp.appendChild(cheatRow);
 }
 
 function renderCombatAct(c) {
