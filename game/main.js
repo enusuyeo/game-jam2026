@@ -11,6 +11,8 @@ const STORAGE_KEY = "tartaros_v4";
 const STRESS_LIMIT = 95;
 const HAND_SIZE = 5;
 const MAX_HAND = 7;
+const CANVAS_WIDTH = 960;
+const CANVAS_HEIGHT = 540;
 const FLOOR_GRID_SIZE = { 1:3, 2:4, 3:5, 4:5, 5:6 };
 const gameSettings = { musicVol: 0.7, drawSpeed: 1.0 };
 const titleLogo = new Image();
@@ -218,6 +220,11 @@ const logPanel = document.getElementById("logPanel") || document.createElement("
 const overlayHint = document.getElementById("overlayHint");
 const canvas = document.getElementById("sceneCanvas");
 const ctx = canvas.getContext("2d");
+const gameViewport = document.getElementById("gameViewport");
+
+if (!canvas || !ctx || !gameViewport) {
+  throw new Error("Required game DOM nodes are missing.");
+}
 
 /* ── State ───────────────────────────────────── */
 const state = {
@@ -241,12 +248,24 @@ const NODE_VISIT_KEY = "tartaros_node_visits";
 const DRAW_PER_CHAR = 1;
 
 requestAnimationFrame(loop);
+syncCanvasResolution();
 renderAll();
 initPointerEvents();
 
 function loop(ts) {
   if(ts-spriteLastTime > 1000/SPRITE_FPS) { spriteFrame=(spriteFrame+1)%4; spriteLastTime=ts; }
   drawScene(); requestAnimationFrame(loop);
+}
+
+function syncCanvasResolution() {
+  const dpr = window.devicePixelRatio;
+  if (!Number.isFinite(dpr) || dpr <= 0) {
+    throw new Error(`Invalid devicePixelRatio: ${dpr}`);
+  }
+
+  canvas.width = Math.round(CANVAS_WIDTH * dpr);
+  canvas.height = Math.round(CANVAS_HEIGHT * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 /* ── Party / Enemy helpers ───────────────────── */
@@ -337,6 +356,7 @@ function makeEffectCtx(s,cb) { return { state:s,combat:cb, aliveParty:()=>aliveP
 
 /* ── D&D: Pointer Events ────────────────────── */
 function initPointerEvents() {
+  window.addEventListener("resize", syncCanvasResolution);
   document.addEventListener("pointermove", onPtrMove);
   document.addEventListener("pointerup", onPtrUp);
   document.addEventListener("keydown", (e) => {
@@ -355,7 +375,6 @@ function onCardDragStart(e, cardIdx) {
   const cb = state.combat; if(!cb) return;
   const cid = cb.hand[cardIdx]; const card = CARD_LIBRARY[cid];
   if(!card.needsTarget) { playAllyCard(cardIdx, -1); return; }
-  const rect = e.target.getBoundingClientRect();
   const clone = e.target.cloneNode(true);
   clone.classList.add("drag-clone");
   clone.style.left = `${e.clientX-60}px`; clone.style.top = `${e.clientY-20}px`;
@@ -392,7 +411,8 @@ function onCanvasClick(e) {
   }
 }
 
-document.getElementById("gameViewport").addEventListener("click", (e) => {
+gameViewport.addEventListener("pointerdown", (e) => {
+  if (!e.isPrimary) return;
   if (state.phase !== PHASE.MAP || !state.floor) return;
   if (e.target.closest(".bottom-bar") || e.target.closest(".hud-top")) return;
   const cp = screenToCanvas(e.clientX, e.clientY);
@@ -425,7 +445,7 @@ function getNodeAtCanvasPos(x, y) {
 
 function screenToCanvas(sx, sy) {
   const r = canvas.getBoundingClientRect();
-  return { x: (sx-r.left)/r.width*960, y: (sy-r.top)/r.height*540 };
+  return { x: (sx-r.left)/r.width*CANVAS_WIDTH, y: (sy-r.top)/r.height*CANVAS_HEIGHT };
 }
 
 function getEnemyAtPos(x, y) {

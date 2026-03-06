@@ -49,6 +49,7 @@ body {
   height: min(100vh, calc(100vw * 9 / 16));
   overflow: hidden;
   background: #0a0e14;
+  touch-action: manipulation;
 }
 
 #sceneCanvas {
