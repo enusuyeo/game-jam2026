@@ -1,0 +1,53 @@
+{
+  "highlights": [
+    {
+      "start_time": "00:07",
+      "end_time": "00:13",
+      "description": "1층 보스 Chain Jailer 등장 컷신",
+      "excitement_score": 7
+    },
+    {
+      "start_time": "00:18",
+      "end_time": "00:22",
+      "description": "초반 강공격으로 긴장감이 올라가는 첫 전투",
+      "excitement_score": 6
+    },
+    {
+      "start_time": "01:39",
+      "end_time": "01:44",
+      "description": "1층 클리어와 전리품 획득",
+      "excitement_score": 8
+    },
+    {
+      "start_time": "01:50",
+      "end_time": "01:56",
+      "description": "2층 보스 Rift Guardian 등장 컷신",
+      "excitement_score": 8
+    },
+    {
+      "start_time": "02:16",
+      "end_time": "02:21",
+      "description": "파티를 위협하는 강한 보스 공격",
+      "excitement_score": 7
+    },
+    {
+      "start_time": "02:28",
+      "end_time": "02:33",
+      "description": "Will Collapsed 게임 오버 연출",
+      "excitement_score": 10
+    },
+    {
+      "start_time": "02:37",
+      "end_time": "02:43",
+      "description": "재도전 시작과 보스 재등장",
+      "excitement_score": 7
+    },
+    {
+      "start_time": "04:00",
+      "end_time": "04:05",
+      "description": "복수 성공과 재격파 피니시",
+      "excitement_score": 9
+    }
+  ],
+  "recommended_order": [5, 7, 3, 2, 0, 6, 4, 1]
+}

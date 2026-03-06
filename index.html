@@ -1,12 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=/game/" />
-  <title>Redirect</title>
-  <script>location.href = "/game/";</script>
-</head>
-<body>
-  <p>이동 중… <a href="/game/">여기를 클릭하세요</a>.</p>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <base href="./game/" />
+    <title>Faded Dungen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Almendra:wght@400;700&family=New+Rocker&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="game-container">
+      <div class="game-viewport" id="gameViewport">
+        <canvas id="sceneCanvas" width="960" height="540"></canvas>
+
+        <div class="hud-top" id="hudPanel"></div>
+        <div class="turn-badge" id="turnBadge"></div>
+
+        <div class="bottom-bar">
+          <div class="actions-area" id="actionsPanel"></div>
+        </div>
+
+        <div class="overlay-hint" id="overlayHint"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js?v=8"></script>
+  </body>
 </html>

@@ -1,0 +1,82 @@
+[
+  {
+    "t": "2026-03-06T12:18:55.744Z",
+    "label": "title"
+  },
+  {
+    "t": "2026-03-06T12:18:58.327Z",
+    "label": "run-start"
+  },
+  {
+    "t": "2026-03-06T12:18:58.327Z",
+    "label": "floor-1-map"
+  },
+  {
+    "t": "2026-03-06T12:18:59.830Z",
+    "label": "floor-1-boss-cutscene"
+  },
+  {
+    "t": "2026-03-06T12:19:05.273Z",
+    "label": "floor-1-combat"
+  },
+  {
+    "t": "2026-03-06T12:19:53.128Z",
+    "label": "floor-2-map"
+  },
+  {
+    "t": "2026-03-06T12:19:54.631Z",
+    "label": "floor-2-boss-cutscene"
+  },
+  {
+    "t": "2026-03-06T12:20:00.035Z",
+    "label": "floor-2-combat"
+  },
+  {
+    "t": "2026-03-06T12:20:37.508Z",
+    "label": "floor-2-floor-reward"
+  },
+  {
+    "t": "2026-03-06T12:20:41.310Z",
+    "label": "floor-3-map"
+  },
+  {
+    "t": "2026-03-06T12:20:42.812Z",
+    "label": "floor-3-boss-cutscene"
+  },
+  {
+    "t": "2026-03-06T12:20:48.234Z",
+    "label": "floor-3-combat"
+  },
+  {
+    "t": "2026-03-06T12:21:25.945Z",
+    "label": "ending"
+  },
+  {
+    "t": "2026-03-06T12:21:27.947Z",
+    "label": "floor-4-map"
+  },
+  {
+    "t": "2026-03-06T12:21:29.449Z",
+    "label": "floor-4-boss-cutscene"
+  },
+  {
+    "t": "2026-03-06T12:21:34.874Z",
+    "label": "floor-4-combat"
+  },
+  {
+    "t": "2026-03-06T12:22:22.478Z",
+    "label": "floor-5-map"
+  },
+  {
+    "t": "2026-03-06T12:22:23.980Z",
+    "label": "floor-5-boss-cutscene"
+  },
+  {
+    "t": "2026-03-06T12:22:29.387Z",
+    "label": "floor-5-combat"
+  },
+  {
+    "t": "2026-03-06T12:22:58.982Z",
+    "label": "floor-5-floor-reward"
+  }
+]
