@@ -63,18 +63,20 @@ body {
 
 .hud-top {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: flex-end;
-  gap: 3px;
-  padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
   pointer-events: none;
   z-index: 10;
+}
+
+.hud-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .hud-chip {
@@ -84,7 +86,10 @@ body {
   background: none;
   border: none;
   padding: 1px 0;
-  font-size: 10px;
+  font-family: "Almendra", serif;
+  font-size: 11px;
+  color: #ffe8a0;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
   white-space: nowrap;
 }
 
@@ -95,6 +100,59 @@ body {
 
 .hud-chip .val {
   font-weight: 600;
+}
+
+.hud-stress-panel {
+  width: 200px;
+  aspect-ratio: 3.38 / 1;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.hud-stress-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("../assets/ui/pixel/map-ui/Stress_panel.png") center/contain no-repeat;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hud-stress-panel .stress-fill {
+  position: absolute;
+  left: 8%;
+  top: 33%;
+  height: 34%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  max-width: 84%;
+  z-index: 0;
+}
+
+.hud-stress-panel .stress-label {
+  position: relative;
+  z-index: 2;
+  font-family: "New Rocker", "Almendra", serif;
+  font-size: 13px;
+  color: #ffe8a0;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+
+.hud-styled-chip {
+  background: url("../assets/ui/pixel/buttons/select_options.png") center/100% 100% no-repeat;
+  padding: 5px 14px;
+  font-family: "Almendra", serif;
+  font-size: 10px;
+  color: #ffe8a0;
+  text-align: center;
+  white-space: nowrap;
+  min-width: 80px;
 }
 
 .hud-separator {
