@@ -67,6 +67,10 @@ charSprites.Rikos.img.src = "../assets/ui/pixel/characters/sideview/rikos-standi
 charSprites.Serin.img.src = "../assets/ui/pixel/characters/sideview/serin-standing-sprite.png";
 const SPRITE_FPS = 6;
 let spriteFrame = 0, spriteLastTime = 0;
+const fxAttack = new Image(); fxAttack.src = "../assets/ui/pixel/effects/attack-other.png";
+const fxHitDefense = new Image(); fxHitDefense.src = "../assets/ui/pixel/effects/hit-with-defense.png";
+const fxHitNoDef = new Image(); fxHitNoDef.src = "../assets/ui/pixel/effects/hit-without-defense.png";
+let activeEffect = null;
 const enemySprite = new Image();
 enemySprite.src = "../assets/ui/pixel/characters/sideview/reaper2-sideview-sprite.png";
 const ENEMY_SPRITE = { fw: 256, fh: 768, cols: 4, seq: [0, 0, 1, 1] };
@@ -121,6 +125,16 @@ function playBgm(key) {
 }
 function stopBgm() { if(currentBgm){currentBgm.pause();currentBgm.currentTime=0;} currentBgmSrc=""; }
 function playSfx(key) { const s=sfx[key]; if(!s)return; s.currentTime=0; s.volume=gameSettings.musicVol; s.play().catch(e=>console.warn("SFX failed:",e.message)); }
+function showEffect(img, x, y, size, duration) {
+  activeEffect = { img, x, y, size, start: Date.now(), duration: duration||400 };
+}
+function getTgtX(tgt) {
+  if(!state.run) return 200;
+  const idx=state.run.party.indexOf(tgt);
+  if(idx<0) return 200;
+  const charW=150,charGap=-10,startX=10;
+  return startX+idx*(charW+charGap)+charW/2;
+}
 const nodeBasicImg = new Image(); nodeBasicImg.src = MAP_UI + "basic-map-node-v01.png";
 const nodeBossImg = new Image(); nodeBossImg.src = MAP_UI + "node-boss.png";
 const nodeEventImg = new Image(); nodeEventImg.src = MAP_UI + "node-event.png";
@@ -371,7 +385,7 @@ function screenToCanvas(sx, sy) {
 
 function getEnemyAtPos(x, y) {
   if(!state.combat) return -1;
-  const enW=150, enStartX=500, enGap=-10, enH=480, ey=570;
+  const enW=150, enStartX=500, enGap=-10, enH=480, ey=590;
   for(let i=0;i<state.combat.enemies.length;i++) {
     const e=state.combat.enemies[i]; if(e.hp<=0)continue;
     const ex=enStartX+i*(enW+enGap);
@@ -483,7 +497,7 @@ function renderSettingsPanel(c) {
   wrap.appendChild(makeSlider("Card Draw Speed", gameSettings.drawSpeed, v => { gameSettings.drawSpeed = v; }, 0.5, 2.0, 0.1));
 
   c.appendChild(wrap);
-  c.appendChild(btn("Back", "primary", () => { state.phase = PHASE.TITLE; renderAll(); }));
+  c.appendChild(styledBtn("Back", () => { state.phase = PHASE.TITLE; renderAll(); }));
 }
 
 function makeSlider(label, val, onChange, min=0, max=1, step=0.05) {
@@ -901,6 +915,11 @@ function playAllyCard(cardIdx, targetEnemyIdx) {
   playSfx("cardPick");
   applyCardEffect(cid,ectx,targetEnemyIdx);
   playSfx(["hit","hitDeep","hitArrow"][randomInt(0,2)]);
+  if(targetEnemyIdx>=0&&cb.enemies[targetEnemyIdx]){
+    const enW=150,enStartX=500,enGap=-10;
+    const ex=enStartX+targetEnemyIdx*(enW+enGap);
+    showEffect(fxAttack,ex+enW/2,340,120,500);
+  }
   if(member) addStress(state, member, card.cost);
   logLine(state,`▶ ${member?.name||"?"}: ${card.name} (stress +${card.cost})`);
 
@@ -960,7 +979,9 @@ function applyEnemyIntent(cb,e) {
     const blk=Math.min(tgt.block,inc),act=inc-blk;tgt.block=Math.max(0,tgt.block-blk);tgt.hp=Math.max(0,tgt.hp-act);
     logLine(state,`${e.name}->${tgt.name} ${inc}${blk?` (block ${blk})`:""}`);
     if(act>0)addStress(state,null,3);
-    if(blk>0&&act===0) playSfx("guardSuccess"); else if(blk>0&&act>0) playSfx("guardFail"); else playSfx("hit");
+    if(blk>0&&act===0){ playSfx("guardSuccess"); showEffect(fxHitDefense,getTgtX(tgt),340,100,400); }
+    else if(blk>0&&act>0){ playSfx("guardFail"); showEffect(fxHitNoDef,getTgtX(tgt),340,100,400); }
+    else { playSfx("hit"); showEffect(fxHitNoDef,getTgtX(tgt),340,100,400); }
     const msg=`${e.name} ⚔ ${tgt.name}  ${act} dmg${blk?` (${blk} blocked)`:""}`;
     if(tgt.hp<=0){logLine(state,`✖ ${tgt.name} down!`);addStress(state,null,30);}
     return msg;
@@ -1087,7 +1108,7 @@ function drawCombat(){
   const run=state.run,cb=state.combat;if(!run)return;
   drawBg(getCombatBg());
   const charW=150, charH=280, charGap=-10, partyStartX=10;
-  const partyCy=420;
+  const partyCy=440;
   const commonArkeH=charH*(charSprites.Arke.scale||1);
   const commonBarY=partyCy+4;
   run.party.forEach((m,i)=>{
@@ -1155,7 +1176,7 @@ function drawCombat(){
   if(cb){
     const enW=150, enH=480, enStartX=500, enGap=-10;
     cb.enemies.forEach((e,i)=>{
-      const ex=enStartX+i*(enW+enGap), ey=570;
+      const ex=enStartX+i*(enW+enGap), ey=590;
       const alive=e.hp>0, hl=highlightedEnemy===i;
       if(!alive) return;
 
@@ -1210,6 +1231,18 @@ function drawCombat(){
       const lw=500,lh=Math.round(lw/5.3),lx=480-lw/2,ly=10;
       if(combatLogBg.complete&&combatLogBg.naturalWidth>0) ctx.drawImage(combatLogBg,lx,ly,lw,lh);
       drawTextOutline(state.enemyActing.preview,480,ly+lh/2,14,"#ff9988","#000",2,"center");
+    }
+    if(activeEffect){
+      const elapsed=Date.now()-activeEffect.start;
+      if(elapsed<activeEffect.duration){
+        const progress=elapsed/activeEffect.duration;
+        const alpha=progress<0.3?progress/0.3:1-(progress-0.3)/0.7;
+        const scale=0.5+progress*0.5;
+        const sz=activeEffect.size*scale;
+        ctx.save();ctx.globalAlpha=Math.max(0,alpha);
+        if(activeEffect.img.complete) ctx.drawImage(activeEffect.img,activeEffect.x-sz/2,activeEffect.y-sz/2,sz,sz);
+        ctx.restore();
+      } else { activeEffect=null; }
     }}
 }
 
