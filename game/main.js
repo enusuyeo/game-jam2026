@@ -92,6 +92,9 @@ const BOSS_SPRITE_PATHS = {
 const BOSS_SPRITE_SHEETS = {
   1: { path: "../assets/sprites/bosses/floor1/pixel-side/idle-breathe/chain-jailer-idle-breathe-sheet.png", fw: 1024, fh: 1024, cols: 4, seq: [0, 1, 2, 3] },
   2: { path: "../assets/sprites/bosses/floor2/pixel-front/idle-core/rift-guardian-idle-core-sheet.png", fw: 896, fh: 1200, cols: 4, seq: [0, 1, 2, 3] },
+  3: { path: "../assets/sprites/bosses/floor3/pixel-simple/idle-sheet/memory-executor-idle-sheet.png", fw: 896, fh: 1200, cols: 4, seq: [0, 1, 2, 3], flip: true },
+  4: { path: "../assets/sprites/bosses/floor4/pixel-sheet/boss4-pixel-idle-sheet-right-4f.png", fw: 320, fh: 430, cols: 4, seq: [0, 1, 2, 3] },
+  5: { path: "../assets/sprites/bosses/floor5/pixel-sheet/boss5-pixel-idle-sheet-right-4f.png", fw: 320, fh: 430, cols: 4, seq: [0, 1, 2, 3] },
 };
 const bossImgCache = {};
 function getBossImg(floor) {
@@ -450,6 +453,8 @@ function renderAll() {
     const isCombat = state.phase === PHASE.COMBAT;
     bb.classList.toggle("combat-top", isCombat);
   }
+  const noScrollPhases = [PHASE.EVENT, PHASE.BATTLE_REWARD, PHASE.BATTLE_REWARD_ASSIGN, PHASE.BATTLE_REWARD_DISCARD, PHASE.FLOOR_REWARD, PHASE.FLOOR_REWARD_PICK, PHASE.FLOOR_REWARD_REMOVE];
+  actionsPanel.classList.toggle("reward-no-scroll", noScrollPhases.includes(state.phase));
   if (ht) ht.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
 }
 
@@ -1007,15 +1012,25 @@ function showDeckView() {
   if(existing) existing.remove();
   const overlay = document.createElement("div");
   overlay.className = "deck-overlay";
+  const deckBg = "../assets/ui/pixel/buttons/deck_detail.png";
+  const selectOpt = "../assets/ui/pixel/buttons/select_options.png";
   overlay.innerHTML = `
     <div class="deck-overlay-panel">
-      <h3>${member.name} — Remaining Cards</h3>
-      <div class="deck-overlay-list">
-        <div><strong>Draw Pile:</strong> ${drawCount} cards</div>
-        <div style="margin-top:8px;padding-left:8px;">${drawLines.replace(/\n/g,"<br>")}</div>
-        <div style="margin-top:12px;"><strong>Hand:</strong> ${handCount} │ <strong>Spent:</strong> ${spentCount}</div>
+      <img src="${deckBg}" alt="" class="deck-overlay-bg">
+      <div class="deck-overlay-inner">
+        <div class="deck-overlay-title">${member.name}'s Remaining Cards</div>
+        <div class="deck-overlay-content">
+          <div class="deck-overlay-list">
+            <div><strong>Draw Pile:</strong> ${drawCount} cards</div>
+            <div style="margin-top:8px;padding-left:8px;">${drawLines.replace(/\n/g,"<br>")}</div>
+            <div style="margin-top:12px;"><strong>Hand:</strong> ${handCount} │ <strong>Spent:</strong> ${spentCount}</div>
+          </div>
+        </div>
+        <button class="deck-overlay-close">
+          <img src="${selectOpt}" alt="" class="deck-overlay-close-bg">
+          <span>Close</span>
+        </button>
       </div>
-      <button class="deck-overlay-close">Close</button>
     </div>
   `;
   overlay.querySelector(".deck-overlay-close").onclick = () => overlay.remove();
@@ -1260,10 +1275,18 @@ function drawCombat(){
         const scaleW=enW/bossSheet.fw,scaleH=enH/bossSheet.fh;
         let scale=Math.min(scaleW,scaleH);
         if(run.floor===1||run.floor===2){scale*=1.8;}
+        if(run.floor===3){scale*=1.2;}
+        if(run.floor===4||run.floor===5){scale*=1.4;}
         const drawW=bossSheet.fw*scale,drawH=bossSheet.fh*scale;
-        const drawX=ex+(enW-drawW)/2+(run.floor===1?10:run.floor===2?15:0);
-        const drawY=(run.floor===1)?ey-drawH-110:(run.floor===2)?ey-drawH-100:ey-drawH;
-        ctx.drawImage(bossSheet.img,sx,sy,bossSheet.fw,bossSheet.fh,drawX,drawY,drawW,drawH);
+        const drawX=ex+(enW-drawW)/2+(run.floor===1?10:run.floor===2?15:run.floor===3?50:(run.floor===4||run.floor===5)?65:0);
+        const drawY=(run.floor===1)?ey-drawH-110:(run.floor===2)?ey-drawH-100:(run.floor===3)?ey-drawH-140:(run.floor===4||run.floor===5)?ey-drawH-130:ey-drawH;
+        if(bossSheet.flip){
+          ctx.translate(drawX+drawW,drawY);
+          ctx.scale(-1,1);
+          ctx.drawImage(bossSheet.img,sx,sy,bossSheet.fw,bossSheet.fh,0,0,drawW,drawH);
+        } else {
+          ctx.drawImage(bossSheet.img,sx,sy,bossSheet.fw,bossSheet.fh,drawX,drawY,drawW,drawH);
+        }
       } else if(enemySprite.complete&&enemySprite.naturalWidth>0){
         const frameIdx=ENEMY_SPRITE.seq[spriteFrame%ENEMY_SPRITE.seq.length];
         const sx=frameIdx*ENEMY_SPRITE.fw,sy=0;
@@ -1278,10 +1301,10 @@ function drawCombat(){
       }
       ctx.restore();
 
-      const uiOffsetX=(cb.isBoss&&run.floor===1)?75:(cb.isBoss&&run.floor===2)?50:0;
+      const uiOffsetX=(cb.isBoss&&run.floor===1)?75:(cb.isBoss&&run.floor===2)?50:(cb.isBoss&&(run.floor===3||run.floor===4||run.floor===5))?75:0;
       const exUI=ex+uiOffsetX;
       const eNameYBase=partyCy-commonArkeH-18;
-      const eNameY=(cb.isBoss&&run.floor===1)?eNameYBase-15:(cb.isBoss&&run.floor===2)?eNameYBase-70:eNameYBase;
+      const eNameY=(cb.isBoss&&run.floor===1)?eNameYBase-15:(cb.isBoss&&run.floor===2)?eNameYBase-70:(cb.isBoss&&(run.floor===3||run.floor===4||run.floor===5))?eNameYBase-15:eNameYBase;
       if(hl){
         drawText("▼",exUI+enW/2,eNameY-20,18,"#ff6b6b","center");
       }
@@ -1306,8 +1329,9 @@ function drawCombat(){
         else drawTextOutline(`🎲${randomInt(1,6)}`,exUI+enW/2,eSpdY,11,"#ccc","#000",2,"center");
       } else if(alive&&e.speed>0) { drawTextOutline(`SPD ${e.speed}`,exUI+enW/2,eSpdY,9,"#cc8888","#000",2,"center"); }
 
-      if(e.block>0) drawTextOutline(`🛡${e.block}`,exUI+enW/2,eSpdY+14,10,"#5da4e6","#000",2,"center");
-      if(e.bleed>0) drawTextOutline(`🩸${e.bleed}`,exUI+enW/2,eSpdY+26,10,"#cc6666","#000",2,"center");
+      if(e.block>0) drawTextOutline(`🛡${e.block}`,exUI+enW/2+30,eSpdY,10,"#5da4e6","#000",2,"left");
+      const statusY=eSpdY+14;
+      if(e.bleed>0) drawTextOutline(`🩸${e.bleed}`,exUI+enW/2,statusY,10,"#cc6666","#000",2,"center");
     });
 
 

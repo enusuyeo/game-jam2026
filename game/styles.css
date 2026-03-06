@@ -283,6 +283,10 @@ body {
   width: 100%;
 }
 
+.actions-area.reward-no-scroll {
+  overflow: hidden;
+}
+
 .actions-area h3 {
   font-size: 12px;
   color: var(--muted);
@@ -732,44 +736,88 @@ button:disabled {
 }
 
 .deck-overlay-panel {
-  background: url("../assets/ui/pixel/buttons/select_options.png") center/100% 100% no-repeat;
-  width: 520px;
-  aspect-ratio: 3.08 / 1;
-  padding: 32px 44px;
-  overflow-y: auto;
+  position: relative;
+  width: min(96vw, calc(96vh * 1920 / 1080));
+}
+
+.deck-overlay-panel > .deck-overlay-bg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.deck-overlay-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(16px, 2.5vh, 32px) clamp(20px, 4vw, 48px);
+  gap: 16px;
   box-sizing: border-box;
 }
 
-.deck-overlay-panel h3 {
+.deck-overlay-title {
   font-family: "New Rocker", "Almendra", serif;
-  font-size: 16px;
+  font-size: clamp(12px, 1.8vw, 18px);
   color: #ffe8a0;
-  margin-bottom: 12px;
   text-align: center;
+  flex-shrink: 0;
+  margin-top: 20px;
+}
+
+.deck-overlay-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 20px;
 }
 
 .deck-overlay-list {
   font-family: "Almendra", serif;
-  font-size: 12px;
+  font-size: clamp(11px, 1.6vw, 15px);
   color: #d0dae8;
   line-height: 1.6;
 }
 
 .deck-overlay-close {
-  margin-top: 14px;
-  width: 100%;
-  padding: 8px 16px;
-  font-family: "New Rocker", "Almendra", serif;
-  font-size: 12px;
-  color: #ffe8a0;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  position: relative;
+  border: none;
   cursor: pointer;
+  padding: 0;
+  background: none;
+  font-family: "New Rocker", "Almendra", serif;
+  font-size: clamp(10px, 1.4vw, 14px);
+  color: #ffe8a0;
+  transition: filter 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  width: 80px;
+  margin-top: -20px;
+}
+
+.deck-overlay-close .deck-overlay-close-bg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.deck-overlay-close span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .deck-overlay-close:hover {
-  background: rgba(0, 0, 0, 0.6);
+  filter: brightness(1.2);
+  transform: scale(1.05);
+}
+
+.deck-overlay-close:active {
+  filter: brightness(0.9);
+  transform: scale(0.97);
 }
 
 /* ── Scrollbar ───────────────────────────────── */
