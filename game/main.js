@@ -3,9 +3,9 @@
    Speed Initiative | D&D Card Usage | Round-Based Combat
    ══════════════════════════════════════════════════════ */
 
-import { CARD_LIBRARY, STARTING_DECKS, MAX_DECK_SIZE, CARD_REWARD_POOL } from "./cards/card-data.js?v=2";
-import { applyCardEffect } from "./cards/card-effects.js";
-import { createEnemyGroup, createBoss, BOSS_NAMES } from "./battle/enemy-factory.js";
+import { CARD_LIBRARY, STARTING_DECKS, MAX_DECK_SIZE, CARD_REWARD_POOL } from "./cards/card-data.js?v=3";
+import { applyCardEffect } from "./cards/card-effects.js?v=3";
+import { createEnemyGroup, createBoss, BOSS_NAMES } from "./battle/enemy-factory.js?v=3";
 
 const STORAGE_KEY = "tartaros_v4";
 const STRESS_LIMIT = 95;
@@ -23,21 +23,21 @@ const PHASE = {
 const FLOOR_NAMES = ["Branded Cellblock", "Fractured Vault", "Corridor of Oblivion", "Hall of Judgment", "Gatekeeper's Altar"];
 const FLOOR_COLORS = [[46,89,142],[102,69,139],[61,116,97],[126,68,74],[124,93,50]];
 const PARTY_TEMPLATES = [
-  { name: "Arke", role: "Frontline Guardian", maxHp: 48 },
-  { name: "Rikos", role: "Melee Executioner", maxHp: 40 },
   { name: "Serin",  role: "Disruption Priest", maxHp: 34 },
+  { name: "Rikos", role: "Melee Executioner", maxHp: 40 },
+  { name: "Arke", role: "Frontline Guardian", maxHp: 48 },
 ];
 
 const EVENT_VARIANTS = [
   { title: "Forbidden Table", text: "The scent of red bread tempts you.", options: [
-    { id:"food_eat", hint:"Eat the food", label: "Hell meal: HP +10, Binding +1, Stress +5", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+10);addStress(s,m,5)}); s.run.consumedFoodCount+=1; logLine(s,"Binding increased."); }},
+    { id:"food_eat", hint:"Eat the food", label: "Hell meal: HP +10, Binding +1, Stress +15", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+10)});addStress(s,null,15); s.run.consumedFoodCount+=1; logLine(s,"Binding increased."); }},
     { id:"food_fast", hint:"Refuse to eat", label: "Keep fasting: Memory Fragment +1", apply(s) { s.run.memoryFragments+=1; logLine(s,"Gained a fragment."); }},
-    { id:"food_altar", hint:"Offer to altar", label: "Altar offering: Gold +30, Binding +1, Stress +3", apply(s) { s.run.gold+=30; s.run.consumedFoodCount+=1; aliveParty(s).forEach(m=>addStress(s,m,3)); logLine(s,"Gained coins."); }},
-    { id:"food_meditate", hint:"Meditate", label: "Meditate: HP +5, Stress -10", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+5);reduceStress(m,10)}); logLine(s,"Recovered."); }},
+    { id:"food_altar", hint:"Offer to altar", label: "Altar offering: Gold +30, Binding +1, Stress +9", apply(s) { s.run.gold+=30; s.run.consumedFoodCount+=1; addStress(s,null,9); logLine(s,"Gained coins."); }},
+    { id:"food_meditate", hint:"Meditate", label: "Meditate: HP +5, Stress -30", apply(s) { aliveParty(s).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+5)});reduceStress(null,30); logLine(s,"Recovered."); }},
   ]},
   { title: "Blackstone Exchange", text: "A shadow merchant whispers.", options: [
     { id:"shop_remove", hint:"Pay gold", label: "20 Gold: Remove a card", apply(s) { if(s.run.gold<20){logLine(s,"Not enough gold.");return;} s.run.gold-=20; const t=aliveParty(s).find(m=>m.deck.length>0); if(t){t.deck.shift();logLine(s,`${t.name} card removed.`);} }},
-    { id:"shop_steroid", hint:"Take injection", label: "Boost injection: Attack +1, Stress +8", apply(s) { s.run.attackBonus+=1; aliveParty(s).forEach(m=>addStress(s,m,8)); logLine(s,"Attack +1."); }},
+    { id:"shop_steroid", hint:"Take injection", label: "Boost injection: Attack +1, Stress +24", apply(s) { s.run.attackBonus+=1; addStress(s,null,24); logLine(s,"Attack +1."); }},
     { id:"shop_contract", hint:"Break contract", label: "Break contract: HP -5, Gold +25", apply(s) { aliveParty(s).forEach(m=>m.hp=Math.max(1,m.hp-5)); s.run.gold+=25; logLine(s,"Gold +25."); }},
     { id:"shop_ignore", hint:"Ignore", label: "Ignore", apply(s) { logLine(s,"Walked past."); }},
   ]},
@@ -49,10 +49,28 @@ function saveEventMemory(set) { localStorage.setItem(EVENT_MEMORY_KEY, JSON.stri
 function markEventSeen(optionId) { const mem=loadEventMemory(); mem.add(optionId); saveEventMemory(mem); }
 function isEventSeen(optionId) { return loadEventMemory().has(optionId); }
 
-const CUTSCENES = buildCutscenes();
+let CUTSCENES = null;
 
 const cardFrontImg = new Image();
 cardFrontImg.src = "../assets/ui/pixel/deck_ui/card_front.png";
+const charSprites = {
+  Arke: { img: new Image(), fw: 200, fh: 373, cols: 4, seq:[0,1,2,3], scale:0.8 },
+  Rikos: { img: new Image(), fw: 256, fh: 768, cols: 4, seq:[0,0,1,1], scale:1.7, yOffset:140 },
+  Serin: { img: new Image(), fw: 256, fh: 768, cols: 4, seq:[1,1,2,2], scale:1.7, yOffset:140 },
+};
+charSprites.Arke.img.src = "../assets/ui/pixel/characters/sideview/arke-standing-sprite.png";
+charSprites.Rikos.img.src = "../assets/ui/pixel/characters/sideview/rikos-standing-sprite.png";
+charSprites.Serin.img.src = "../assets/ui/pixel/characters/sideview/serin-standing-sprite.png";
+const SPRITE_FPS = 6;
+let spriteFrame = 0, spriteLastTime = 0;
+const enemySprite = new Image();
+enemySprite.src = "../assets/ui/pixel/characters/sideview/reaper2-sideview-sprite.png";
+const ENEMY_SPRITE = { fw: 256, fh: 768, cols: 4, seq: [0, 0, 1, 1] };
+
+const hpBarFrame = new Image();
+const combatLogBg = new Image();
+combatLogBg.src = "../assets/ui/pixel/buttons/speed_ui.png";
+hpBarFrame.src = "../assets/ui/pixel/hp-ui.png";
 const cardBackImg = new Image();
 cardBackImg.src = "../assets/ui/pixel/deck_ui/card_back.png";
 
@@ -61,6 +79,11 @@ function loadImg(name) { const img = new Image(); img.src = BG_PATH + name; retu
 
 const bgGameStart = loadImg("bg_gamestart.png");
 const bgMap = loadImg("map_bg.png");
+const MAP_UI = "../assets/ui/pixel/map-ui/";
+const nodeBasicImg = new Image(); nodeBasicImg.src = MAP_UI + "basic-map-node-v01.png";
+const nodeBossImg = new Image(); nodeBossImg.src = MAP_UI + "node-boss.png";
+const nodeEventImg = new Image(); nodeEventImg.src = MAP_UI + "node-event.png";
+const iconArrowDown = new Image(); iconArrowDown.src = MAP_UI + "icon-arrow-down.png";
 
 const bgFloorNormal = {
   1: loadImg("bg-01-normal-wall.png"),
@@ -124,23 +147,36 @@ requestAnimationFrame(loop);
 renderAll();
 initPointerEvents();
 
-function loop() { drawScene(); requestAnimationFrame(loop); }
+function loop(ts) {
+  if(ts-spriteLastTime > 1000/SPRITE_FPS) { spriteFrame=(spriteFrame+1)%4; spriteLastTime=ts; }
+  drawScene(); requestAnimationFrame(loop);
+}
 
 /* ── Party / Enemy helpers ───────────────────── */
 function createMember(tpl) { return { name:tpl.name, role:tpl.role, hp:tpl.maxHp, maxHp:tpl.maxHp, stress:0, block:0, speed:0, deck:[...STARTING_DECKS[tpl.name]] }; }
-function isActive(m) { return m.hp>0 && m.stress<=STRESS_LIMIT; }
+function isActive(m) { return m.hp>0 && (!state.run || state.run.stress<=STRESS_LIMIT); }
 function aliveParty(s) { return s.run?s.run.party.filter(isActive):[]; }
 function aliveEnemyList(combat) { return combat?combat.enemies.map((e,i)=>[i,e]).filter(([,e])=>e.hp>0):[]; }
 
-function addStress(s,m,a) { if(!isActive(m))return; const o=m.stress; m.stress=Math.min(100,m.stress+a); if(o<=STRESS_LIMIT&&m.stress>STRESS_LIMIT)onCollapse(s,m); }
-function reduceStress(m,a) { m.stress=Math.max(0,m.stress-a); }
-function onCollapse(s,m) { logLine(s,`⚠ ${m.name} Collapsed!`); if(!s.run.collapsedNames.includes(m.name))s.run.collapsedNames.push(m.name); s.run.party.filter(x=>x!==m&&isActive(x)).forEach(x=>addStress(s,x,8)); }
+function addStress(s,m,a) {
+  if(!s.run) return;
+  const old=s.run.stress;
+  s.run.stress=Math.min(100,s.run.stress+a);
+  if(old<=STRESS_LIMIT&&s.run.stress>STRESS_LIMIT) onCollapse(s);
+}
+function reduceStress(m,a) {
+  if(state.run) state.run.stress=Math.max(0,state.run.stress-a);
+}
+function onCollapse(s) {
+  logLine(s,"⚠ Party stress limit reached!");
+  s.run.party.forEach(m=>{ if(isActive(m)&&!s.run.collapsedNames.includes(m.name)) s.run.collapsedNames.push(m.name); });
+}
 
 function dmgEnemyFn(combat,s,ti,raw) {
   const e=combat.enemies[ti]; if(!e||e.hp<=0)return;
   const blk=Math.min(e.block,raw),act=raw-blk; e.block=Math.max(0,e.block-blk); e.hp=Math.max(0,e.hp-act);
   logLine(s,`→ ${e.name} Damage ${act}${blk?` (Blocked ${blk})`:""}`);
-  if(e.hp<=0){logLine(s,`✦ ${e.name} Defeated!`); aliveParty(s).forEach(m=>reduceStress(m,3));}
+  if(e.hp<=0){logLine(s,`✦ ${e.name} Defeated!`); reduceStress(null,9);}
 }
 function drawCardsFromPile(combat, n) {
   const drawn = [];
@@ -264,8 +300,8 @@ function getNodeAtCanvasPos(x, y) {
   const adjIds = new Set(getAdj(fl).map(n => n.id));
   const gridArea = Math.min(420, 480);
   const cellSize = Math.floor(gridArea / s);
-  const ox = 480 - cellSize * s / 2, oy = 60;
-  const nodeR = Math.max(10, Math.min(16, Math.floor(cellSize * 0.32)));
+  const ox = 480 - cellSize * s / 2, oy = 55;
+  const nodeSize = Math.max(36, Math.min(56, Math.floor(cellSize * 0.85)));
 
   for (let r = 0; r < s; r++) {
     for (let c = 0; c < s; c++) {
@@ -274,7 +310,7 @@ function getNodeAtCanvasPos(x, y) {
       const cx = ox + c * cellSize + cellSize / 2;
       const cy = oy + r * cellSize + cellSize / 2;
       const dx = x - cx, dy = y - cy;
-      if (dx * dx + dy * dy <= (nodeR + 8) * (nodeR + 8)) return nd;
+      if (dx * dx + dy * dy <= (nodeSize / 2 + 6) * (nodeSize / 2 + 6)) return nd;
     }
   }
   return null;
@@ -287,10 +323,11 @@ function screenToCanvas(sx, sy) {
 
 function getEnemyAtPos(x, y) {
   if(!state.combat) return -1;
+  const enW=150, enStartX=500, enGap=-10, enH=480, ey=570;
   for(let i=0;i<state.combat.enemies.length;i++) {
     const e=state.combat.enemies[i]; if(e.hp<=0)continue;
-    const ex=620, ey=120+i*100;
-    if(x>=ex&&x<=ex+280&&y>=ey&&y<=ey+85) return i;
+    const ex=enStartX+i*(enW+enGap);
+    if(x>=ex&&x<=ex+enW&&y>=ey-enH&&y<=ey) return i;
   }
   return -1;
 }
@@ -298,45 +335,34 @@ function getEnemyAtPos(x, y) {
 /* ── Rendering ───────────────────────────────── */
 function renderAll() {
   renderHUD(); renderDesc(); renderActions(); renderLogs();
+  const tb = document.getElementById("turnBadge");
+  if(tb) tb.textContent = state.combat ? `Turn ${state.combat.roundNumber}` : "";
   const bb = document.querySelector(".bottom-bar");
   const ht = document.querySelector(".hud-top");
-  if (bb) bb.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
+  if (bb) {
+    bb.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
+    const isCombat = state.phase === PHASE.COMBAT;
+    bb.classList.toggle("combat-top", isCombat);
+  }
   if (ht) ht.style.pointerEvents = state.phase === PHASE.MAP ? "none" : "auto";
 }
 
 function renderHUD() {
   hudPanel.innerHTML=""; const run=state.run;
   if(!run){return;}
-  addChip(hudPanel,"Floor",`${run.floor}/5`); addChip(hudPanel,"Gold",`${run.gold}`);
-  addChip(hudPanel,"Binding",`${run.consumedFoodCount}`);
-  if(run.attackBonus)addChip(hudPanel,"ATK",`+${run.attackBonus}`);
-  const sep=document.createElement("div");sep.className="hud-separator";hudPanel.appendChild(sep);
-  run.party.forEach(m=>{
-    const el=document.createElement("div"); el.className="hud-member"+(isActive(m)?"":" dead");
-    const hp=m.maxHp>0?(m.hp/m.maxHp)*100:0, st=Math.min(m.stress,100);
-    const hc=hp>50?"#50c878":hp>25?"#e6b84d":"#ff4d4d";
-    const sc=st<=30?"#50c878":st<=60?"#e6b84d":st<=STRESS_LIMIT?"#d46ab0":"#ff4d4d";
-    const tag=!isActive(m)?(m.stress>STRESS_LIMIT?" [Collapsed]":" [Dead]"):"";
-    el.innerHTML=`<span class="m-name">${m.name}</span><span class="m-role">${m.role}</span>
-      <span class="hp-bar"><span class="fill" style="width:${hp}%;background:${hc}"></span></span><span class="hp-num">${m.hp}</span>
-      <span class="stress-bar"><span class="fill" style="width:${st}%;background:${sc}"></span></span><span class="stress-num">${m.stress}${tag}</span>
-      <span style="color:#8a9bb0;font-size:9px">SPD${m.speed} Deck${m.deck.length}</span>
-      ${m.block>0?`<span style="color:#5da4e6;font-size:10px">🛡${m.block}</span>`:""}`;
-    hudPanel.appendChild(el);
-  });
+  if(!state.combat){
+    addChip(hudPanel,"Floor",`${run.floor}/5`); addChip(hudPanel,"Gold",`${run.gold}`);
+    addChip(hudPanel,"Binding",`${run.consumedFoodCount}`);
+    addChip(hudPanel,"Stress",`${run.stress}/${STRESS_LIMIT}`);
+    if(run.attackBonus)addChip(hudPanel,"ATK",`+${run.attackBonus}`);
+  }
   if(state.combat){const s2=document.createElement("div");s2.className="hud-separator";hudPanel.appendChild(s2);
-    addChip(hudPanel,"Turn",`${state.combat.roundNumber}`);addChip(hudPanel,"Draw Pile",`${state.combat.drawPile.length}`);addChip(hudPanel,"Hand",`${state.combat.hand.length}`);}
+  }
 }
 function addChip(p,l,v){const el=document.createElement("div");el.className="hud-chip";el.innerHTML=`<span class="label">${l}</span><span class="val">${v}</span>`;p.appendChild(el);}
 
 function renderDesc() {
-  let msg="";
-  if(state.phase===PHASE.COMBAT&&state.discarding&&state.actingMember) msg=`${state.actingMember.name}: Hand limit exceeded! Please discard cards.`;
-  else if(state.phase===PHASE.COMBAT&&state.waitingForAlly&&state.actingMember) msg=`${state.actingMember.name}'s turn (SPD ${state.actingMember.speed}) — Draw ${DRAW_PER_CHAR} cards | Attack: Drag to enemy / Defense-Buff: Click`;
-  else if(state.phase===PHASE.TITLE||state.phase==="SETTINGS") msg="";
-  else if(state.phase===PHASE.MAP) msg="";
-  else msg="";
-  descriptionPanel.textContent=msg; overlayHint.textContent="";
+  descriptionPanel.innerHTML=""; overlayHint.textContent="";
 }
 
 function renderActions() {
@@ -346,15 +372,15 @@ function renderActions() {
     [PHASE.TITLE]:()=>{head.textContent="";renderTitleButtons(row);},
     ["SETTINGS"]:()=>{head.textContent="";renderSettingsPanel(row);},
     [PHASE.MAP]:()=>{head.textContent="Map";renderMapAct(row);},
-    [PHASE.COMBAT]:()=>{head.textContent=state.discarding?"Discard Cards":state.waitingForAlly?"Select Card":"Combat";renderCombatAct(row);},
-    [PHASE.EVENT]:()=>{head.textContent="Choice";renderEventAct(row);},
-    [PHASE.BATTLE_REWARD]:()=>{head.textContent="Reward";renderRewardAct(row);},
-    [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="Select Character";renderAssignAct(row);},
-    [PHASE.FLOOR_REWARD]:()=>{head.textContent="Floor Reward";renderFloorAct(row);},
-    [PHASE.FLOOR_REWARD_PICK]:()=>{head.textContent="Select Character";renderFloorPickAct(row);},
-    [PHASE.FLOOR_REWARD_REMOVE]:()=>{head.textContent="Remove Card";renderFloorRemoveAct(row);},
-    [PHASE.CUTSCENE]:()=>{head.textContent="Cutscene";row.appendChild(btn("Next","primary",nextFrame));row.appendChild(btn("Skip","",skipScene));},
-    [PHASE.ENDING]:()=>{head.textContent="Result";row.appendChild(btn("Restart","primary",startNewRun));},
+    [PHASE.COMBAT]:()=>{head.textContent="";renderCombatAct(row);},
+    [PHASE.EVENT]:()=>{head.textContent="";renderEventAct(row);},
+    [PHASE.BATTLE_REWARD]:()=>{head.textContent="";renderRewardAct(row);},
+    [PHASE.BATTLE_REWARD_ASSIGN]:()=>{head.textContent="";renderAssignAct(row);},
+    [PHASE.FLOOR_REWARD]:()=>{head.textContent="";renderFloorAct(row);},
+    [PHASE.FLOOR_REWARD_PICK]:()=>{head.textContent="";renderFloorPickAct(row);},
+    [PHASE.FLOOR_REWARD_REMOVE]:()=>{head.textContent="";renderFloorRemoveAct(row);},
+    [PHASE.CUTSCENE]:()=>{head.textContent="";row.appendChild(styledBtn("Skip",skipScene));},
+    [PHASE.ENDING]:()=>{head.textContent="";row.appendChild(styledBtn("Restart",startNewRun));},
   };
   const h=H[state.phase]; if(h)h();
   actionsPanel.appendChild(head); actionsPanel.appendChild(row);
@@ -435,28 +461,36 @@ function renderMapAct(c) {
     }
   }
 
-  const skipBtn = btn("⏭ Skip Stage (Cheat)", "", () => {
+  const skipBtn = btn("⏭ Skip Stage", "", () => {
     if(run.floor>=5) return;
     loadFloor(run.floor+1);
   });
   skipBtn.style.pointerEvents = "auto";
   c.appendChild(skipBtn);
+  const failBtn = btn("💀 Defeat", "danger", () => {
+    handleFail("Cheat: forced defeat.");
+  });
+  failBtn.style.pointerEvents = "auto";
+  c.appendChild(failBtn);
+  const bossBtn = btn("👑 Boss Clear", "danger", () => {
+    if(!CUTSCENES) CUTSCENES=buildCutscenes();
+    const floorRef=state.floor, runFloor=run.floor;
+    playCutscene(`boss_defeat_floor_${runFloor}`,()=>{
+      if(floorRef&&floorRef.bossNode) floorRef.completedNodeIds.add(floorRef.bossNode.id);
+      if(runFloor>=5){const et=evalEnd(true);playCutscene(endSceneId(et),()=>moveEnd(et));}
+      else{state.phase=PHASE.FLOOR_REWARD;state.combat=null;renderAll();}
+    });
+  });
+  bossBtn.style.pointerEvents = "auto";
+  c.appendChild(bossBtn);
 }
 
 function renderCombatAct(c) {
   if(!state.combat) return;
-  if(state.diceRolling.active) {
-    const info = document.createElement("div"); info.style.cssText="font-size:13px;color:#ffc857;padding:4px 0;font-weight:600;";
-    info.textContent = state.diceRolling.settled ? "Speed locked! Action starts..." : "🎲 Rolling dice...";
-    c.appendChild(info);
+  if(state.diceRolling.active && !state.waitingForAlly && !state.enemyActing) {
     return;
   }
-  if(state.enemyActing) {
-    const info = document.createElement("div"); info.style.cssText="font-size:14px;color:#ff9988;padding:8px 0;font-weight:600;text-align:center;";
-    info.textContent = state.enemyActing.preview;
-    c.appendChild(info);
-    return;
-  }
+  if(state.enemyActing) { return; }
   if(state.discarding && state.combat) {
     const cb=state.combat;
     const excess = cb.hand.length - MAX_HAND;
@@ -476,21 +510,9 @@ function renderCombatAct(c) {
     return;
   }
   if(!state.waitingForAlly) {
-    const cb = state.combat;
-    const aliveE = aliveEnemyList(cb);
-    if (aliveE.length > 0) {
-      const preview = document.createElement("div"); preview.style.cssText="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:6px;";
-      preview.innerHTML = `<div style="color:#cc8888;font-weight:600;margin-bottom:3px">Enemy Intent Preview</div>` +
-        aliveE.map(([,e]) => {
-          const il = intentLbl(e.intent);
-          return `<div style="color:#eeddcc;padding:1px 0">${e.name} — ${il}</div>`;
-        }).join("");
-      c.appendChild(preview);
+    if(state.turnOrder.length===0 || state.currentActionIdx>=state.turnOrder.length) {
+      c.appendChild(styledBtn("🎲 Start Turn", startCombatRound));
     }
-    c.appendChild(btn("🎲 Start Turn", "primary", startCombatRound));
-    const info = document.createElement("div"); info.style.cssText="font-size:10px;color:#8a9bb0;padding:2px 0;";
-    info.textContent = `Turn ${cb.roundNumber} │ Hand ${cb.hand.length} │ Draw Pile ${cb.drawPile.length}`;
-    c.appendChild(info);
     return;
   }
   const cb = state.combat;
@@ -504,18 +526,31 @@ function renderCombatAct(c) {
     const typeColor = card.type === "attack" ? "#ff8866" : "#66ccff";
     const typeLabel = card.type === "attack" ? "Attack" : "Skill";
     el.innerHTML = `
-      <div class="vc-cost">${card.cost}</div>
+      <div class="vc-cost" title="Stress +${card.cost}">💀${card.cost}</div>
       <div class="vc-name">${card.name}</div>
       <div class="vc-type" style="color:${typeColor}">${typeLabel}</div>
       <div class="vc-desc">${card.text}</div>
-      <div class="vc-hint">${isDrag ? "▷ Drag to enemy" : "▷ Click to use"}</div>
+      <div class="vc-hint">${isDrag ? "▷ Drag" : "▷ Click"}</div>
     `;
     if (isDrag) { el.addEventListener("pointerdown", (e) => onCardDragStart(e, i)); }
     else { el.onclick = () => playAllyCard(i, -1); }
     cardRow.appendChild(el);
   });
-  c.appendChild(cardRow);
-  c.appendChild(btn("Pass", "", allyPass));
+  const combatRow = document.createElement("div");
+  combatRow.style.cssText = "display:flex;align-items:flex-start;gap:8px;width:100%;";
+  combatRow.appendChild(cardRow);
+  const sideCol = document.createElement("div");
+  sideCol.style.cssText = "display:flex;flex-direction:column;gap:0px;position:absolute;top:20px;right:6px;";
+  const passBtn = imgBtn("../assets/ui/pixel/buttons/pass_turn.png", allyPass);
+  passBtn.querySelector("img").style.cssText = "height:auto;width:80px;";
+  passBtn.style.padding = "0";
+  sideCol.appendChild(passBtn);
+  const deckBtn = imgBtn("../assets/ui/pixel/buttons/deck_details.png", () => showDeckView());
+  deckBtn.querySelector("img").style.cssText = "height:auto;width:80px;";
+  deckBtn.style.padding = "0";
+  sideCol.appendChild(deckBtn);
+  combatRow.appendChild(sideCol);
+  c.appendChild(combatRow);
 }
 
 function renderEventAct(c) {
@@ -540,17 +575,57 @@ function renderEventAct(c) {
   wrap.appendChild(grid);
   c.appendChild(wrap);
 }
-function renderRewardAct(c) { state.rewardChoices.forEach(cid=>{const card=CARD_LIBRARY[cid];c.appendChild(btn(`<span class="card-chip">${card.name}</span> — ${card.text}`,"good",()=>{state.pendingRewardCard=cid;state.phase=PHASE.BATTLE_REWARD_ASSIGN;renderAll();}));}); c.appendChild(btn("Skip (Gold +10)","",()=>{state.run.gold+=10;logLine(state,"Gold +10");completeNode(state.combat.node);}));}
-function renderAssignAct(c) { const cid=state.pendingRewardCard;if(!cid)return;const card=CARD_LIBRARY[cid];const el=aliveParty(state).filter(m=>m.deck.length<MAX_DECK_SIZE);if(!el.length){logLine(state,"Deck full.");state.run.gold+=10;state.pendingRewardCard=null;completeNode(state.combat.node);return;} const info=document.createElement("div");info.innerHTML=`<strong>${card.name}</strong> Select a character to add:`;info.style.cssText="font-size:12px;margin-bottom:4px;";c.appendChild(info);el.forEach(m=>c.appendChild(btn(`${m.name} (Deck ${m.deck.length}/${MAX_DECK_SIZE})`,"good",()=>{m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);state.pendingRewardCard=null;completeNode(state.combat.node);})));c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.BATTLE_REWARD;renderAll();}));}
-function renderFloorAct(c) { c.appendChild(btn("Remove Card","good",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));c.appendChild(btn("Attack +1","",()=>{state.run.attackBonus+=1;logLine(state,"Attack +1.");proceedFloor();}));c.appendChild(btn("Rest: HP+12, Stress-15","",()=>{aliveParty(state).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+12);reduceStress(m,15)});logLine(state,"Rested.");proceedFloor();}));}
-function renderFloorPickAct(c) { const ms=aliveParty(state).filter(m=>m.deck.length>0);if(!ms.length){logLine(state,"No cards.");proceedFloor();return;}ms.forEach(m=>c.appendChild(btn(`${m.name} (Deck ${m.deck.length})`,"",()=>{state.removeMember=m;state.phase=PHASE.FLOOR_REWARD_REMOVE;renderAll();})));c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.FLOOR_REWARD;renderAll();}));}
-function renderFloorRemoveAct(c) { const m=state.removeMember;if(!m)return;[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"en")).forEach(cid=>{const cnt=m.deck.filter(x=>x===cid).length;c.appendChild(btn(`${CARD_LIBRARY[cid].name} x${cnt}`,"danger",()=>{const idx=m.deck.indexOf(cid);if(idx>=0)m.deck.splice(idx,1);logLine(state,`${m.name}: removed.`);proceedFloor();}));});c.appendChild(btn("Cancel","",()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}));}
+function renderRewardAct(c) {
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  state.rewardChoices.forEach(cid=>{const card=CARD_LIBRARY[cid];const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${card.name} — ${card.text}`;b.onclick=()=>{state.pendingRewardCard=cid;state.phase=PHASE.BATTLE_REWARD_ASSIGN;renderAll();};grid.appendChild(b);});
+  const skip=document.createElement("button");skip.className="event-choice-btn";skip.textContent="Skip (Gold +10)";skip.onclick=()=>{state.run.gold+=10;logLine(state,"Gold +10");completeNode(state.combat.node);};grid.appendChild(skip);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderAssignAct(c) {
+  const cid=state.pendingRewardCard;if(!cid)return;const card=CARD_LIBRARY[cid];
+  const el=aliveParty(state).filter(m=>m.deck.length<MAX_DECK_SIZE);
+  if(!el.length){logLine(state,"Deck full.");state.run.gold+=10;state.pendingRewardCard=null;completeNode(state.combat.node);return;}
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  el.forEach(m=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${m.name} (${m.deck.length}/${MAX_DECK_SIZE})`;b.onclick=()=>{m.deck.push(cid);state.run.gold+=10;logLine(state,`${m.name}: ${card.name} added.`);state.pendingRewardCard=null;completeNode(state.combat.node);};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.BATTLE_REWARD;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorAct(c) {
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  [{t:"Remove Card",fn:()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();}},{t:"Attack +1",fn:()=>{state.run.attackBonus+=1;logLine(state,"Attack +1.");proceedFloor();}},{t:"Rest: HP+12, Stress-45",fn:()=>{aliveParty(state).forEach(m=>{m.hp=Math.min(m.maxHp,m.hp+12)});reduceStress(null,45);logLine(state,"Rested.");proceedFloor();}}].forEach(({t,fn})=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=t;b.onclick=fn;grid.appendChild(b);});
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorPickAct(c) {
+  const ms=aliveParty(state).filter(m=>m.deck.length>0);
+  if(!ms.length){logLine(state,"No cards.");proceedFloor();return;}
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  ms.forEach(m=>{const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${m.name} (${m.deck.length})`;b.onclick=()=>{state.removeMember=m;state.phase=PHASE.FLOOR_REWARD_REMOVE;renderAll();};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.FLOOR_REWARD;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
+function renderFloorRemoveAct(c) {
+  const m=state.removeMember;if(!m)return;
+  const unique=[...new Set(m.deck)].sort((a,b)=>CARD_LIBRARY[a].name.localeCompare(CARD_LIBRARY[b].name,"en"));
+  const wrap=document.createElement("div");wrap.className="event-choice-wrap";
+  const grid=document.createElement("div");grid.className="event-choice-grid cols-3";
+  unique.forEach(cid=>{const cnt=m.deck.filter(x=>x===cid).length;const b=document.createElement("button");b.className="event-choice-btn";b.textContent=`${CARD_LIBRARY[cid].name} x${cnt}`;b.onclick=()=>{const idx=m.deck.indexOf(cid);if(idx>=0)m.deck.splice(idx,1);logLine(state,`${m.name}: removed.`);proceedFloor();};grid.appendChild(b);});
+  const cancel=document.createElement("button");cancel.className="event-choice-btn";cancel.textContent="Cancel";cancel.onclick=()=>{state.phase=PHASE.FLOOR_REWARD_PICK;renderAll();};grid.appendChild(cancel);
+  wrap.appendChild(grid);c.appendChild(wrap);
+}
 function renderLogs() { logPanel.innerHTML=""; }
 function btn(l,cls,fn,dis=false){const b=document.createElement("button");b.innerHTML=l;if(cls)b.classList.add(cls);b.disabled=dis;b.onclick=fn;return b;}
+function styledBtn(label,fn){
+  const b=document.createElement("button");b.className="styled-option-btn";
+  b.textContent=label;b.onclick=fn;return b;
+}
 
 /* ── Game Logic ──────────────────────────────── */
 function startNewRun() {
-  state.run={floor:1,party:PARTY_TEMPLATES.map(createMember),gold:0,consumedFoodCount:0,attackBonus:0,memoryFragments:0,discoveredPersistent:loadPersistent(),discoveredRun:new Set(),runIndex:Date.now(),collapsedNames:[]};
+  state.run={floor:1,party:PARTY_TEMPLATES.map(createMember),gold:0,consumedFoodCount:0,attackBonus:0,memoryFragments:0,discoveredPersistent:loadPersistent(),discoveredRun:new Set(),runIndex:Date.now(),collapsedNames:[],stress:0};
   state.logs=[];state.turnOrder=[];state.currentActionIdx=0;state.waitingForAlly=false;state.actingMember=null;state.discarding=false;
   loadFloor(1);
 }
@@ -650,7 +725,7 @@ function startEvent(nd){state.phase=PHASE.EVENT;state.eventContext={node:nd,vari
 
 function startCombat(nd,isBoss) {
   const run=state.run; let enemies;
-  if(isBoss){enemies=[createBoss(run.floor)];aliveParty(state).forEach(m=>addStress(state,m,3));}
+  if(isBoss){enemies=[createBoss(run.floor)];addStress(state,null,9);}
   else enemies=createEnemyGroup(run.floor);
   const combined=[];aliveParty(state).forEach(m=>combined.push(...[...m.deck]));shuffleArr(combined);
   state.combat={node:nd,isBoss,enemies,drawPile:combined,spentPile:[],hand:[],roundNumber:1};
@@ -660,7 +735,7 @@ function startCombat(nd,isBoss) {
 
 /* ── Round-based combat ────────────────────────── */
 
-const DRAW_PER_CHAR = 2;
+const DRAW_PER_CHAR = 1;
 
 function startCombatRound() {
   const cb=state.combat, run=state.run; if(!cb)return;
@@ -717,12 +792,16 @@ function processNextAction() {
     renderAll();
 
     setTimeout(()=>{
-      state.enemyActing = null;
-      applyEnemyIntent(cb,e);
-      if(!aliveParty(state).length){handleFail("Party wiped.");return;}
-      state.currentActionIdx++;
+      const result = applyEnemyIntent(cb,e);
+      if(!aliveParty(state).length){state.enemyActing=null;handleFail("Party wiped.");return;}
+      state.enemyActing = { enemy: e, preview: result || preview };
       renderAll();
-      setTimeout(processNextAction, 400);
+      setTimeout(()=>{
+        state.enemyActing = null;
+        state.currentActionIdx++;
+        renderAll();
+        setTimeout(processNextAction, 300);
+      }, 1500);
     }, 2500);
     return;
   }
@@ -730,8 +809,12 @@ function processNextAction() {
   const member=state.run.party[unit.index];
   if(!isActive(member)){state.currentActionIdx++;processNextAction();return;}
 
-  drawCardsFromPile(cb, DRAW_PER_CHAR);
-  logLine(state, `${member.name} drew ${DRAW_PER_CHAR} cards`);
+  if(cb.roundNumber === 1 && cb.hand.length === 0) {
+    let n = HAND_SIZE;
+    while(n > 0 && cb.hand.length < 10 && cb.drawPile.length) { cb.hand.push(cb.drawPile.pop()); n--; }
+  } else if(cb.roundNumber > 1) {
+    drawCardsFromPile(cb, DRAW_PER_CHAR);
+  }
 
   if(!cb.hand.length&&!cb.drawPile.length){
     logLine(state, `${member.name}: no cards left, pass.`);
@@ -755,10 +838,12 @@ function processNextAction() {
 function playAllyCard(cardIdx, targetEnemyIdx) {
   if(!state.waitingForAlly||!state.combat)return;
   const cb=state.combat, cid=cb.hand[cardIdx], card=CARD_LIBRARY[cid];
+  const member=state.actingMember;
   cb.hand.splice(cardIdx,1); cb.spentPile.push(cid);
   const ectx=makeEffectCtx(state,cb);
   applyCardEffect(cid,ectx,targetEnemyIdx);
-  logLine(state,`▶ ${state.actingMember.name}: ${card.name}`);
+  if(member) addStress(state, member, card.cost);
+  logLine(state,`▶ ${member?.name||"?"}: ${card.name} (stress +${card.cost})`);
 
   state.waitingForAlly=false;state.actingMember=null;state.currentActionIdx++;
   if(aliveEnemyList(cb).length===0){handleWin();return;}
@@ -777,6 +862,21 @@ function discardCard(cardIdx) {
   renderAll();
 }
 
+function showDeckView() {
+  if(!state.combat||!state.actingMember) return;
+  const member = state.actingMember;
+  const cb = state.combat;
+  const deckCards = member.deck.reduce((acc, cid) => { acc[cid]=(acc[cid]||0)+1; return acc; }, {});
+  const lines = Object.entries(deckCards).map(([cid,cnt]) => {
+    const card = CARD_LIBRARY[cid];
+    return `${card.name} x${cnt} (💀${card.cost})`;
+  }).join("\n");
+  const handCount = cb.hand.length;
+  const drawCount = cb.drawPile.length;
+  const spentCount = cb.spentPile.length;
+  alert(`[${member.name}'s Deck] ${member.deck.length} cards\n${lines}\n\n─── Combat ───\nHand: ${handCount} │ Draw Pile: ${drawCount} │ Spent: ${spentCount}`);
+}
+
 function allyPass() {
   if(!state.waitingForAlly)return;
   logLine(state,`${state.actingMember.name}: Pass.`);
@@ -786,23 +886,45 @@ function allyPass() {
 
 function endRound() {
   const cb=state.combat;if(!cb)return;
-  cb.enemies.forEach(e=>{if(e.hp>0&&e.bleed>0){e.hp=Math.max(0,e.hp-e.bleed);logLine(state,`${e.name} Bleed ${e.bleed}`);if(e.hp<=0){logLine(state,`✦ ${e.name} bled out!`);aliveParty(state).forEach(m=>reduceStress(m,3));}}});
+  cb.enemies.forEach(e=>{if(e.hp>0&&e.bleed>0){e.hp=Math.max(0,e.hp-e.bleed);logLine(state,`${e.name} Bleed ${e.bleed}`);if(e.hp<=0){logLine(state,`✦ ${e.name} bled out!`);reduceStress(null,9);}}});
   if(aliveEnemyList(cb).length===0){handleWin();return;}
   cb.enemies.forEach(e=>{if(e.hp>0){e.block=0;advanceIntent(e);}});
-  const alive=aliveParty(state);if(alive.length)addStress(state,alive[randomInt(0,alive.length-1)],1);
+  const alive=aliveParty(state);if(alive.length)addStress(state,null,1);
   cb.roundNumber++;state.turnOrder=[];state.waitingForAlly=false;state.actingMember=null;
   renderAll();
 }
 
 function applyEnemyIntent(cb,e) {
-  const alive=aliveParty(state);if(!alive.length)return;
-  if(e.intent.type==="attack"){const tgt=alive[randomInt(0,alive.length-1)];const inc=e.intent.value+e.attackBonus;const blk=Math.min(tgt.block,inc),act=inc-blk;tgt.block=Math.max(0,tgt.block-blk);tgt.hp=Math.max(0,tgt.hp-act);logLine(state,`${e.name}->${tgt.name} ${inc}${blk?` (block ${blk})`:""}`);if(act>0)addStress(state,tgt,3);if(tgt.hp<=0){logLine(state,`✖ ${tgt.name} down!`);aliveParty(state).forEach(m=>addStress(state,m,10));}}
-  else if(e.intent.type==="defend"){e.block+=e.intent.value;logLine(state,`${e.name} Block +${e.intent.value}`);}
-  else if(e.intent.type==="buff"){e.attackBonus+=e.intent.value;logLine(state,`${e.name} Buff +${e.intent.value}`);}
+  const alive=aliveParty(state);if(!alive.length)return"";
+  if(e.intent.type==="attack"){
+    const tgt=alive[randomInt(0,alive.length-1)];const inc=e.intent.value+e.attackBonus;
+    const blk=Math.min(tgt.block,inc),act=inc-blk;tgt.block=Math.max(0,tgt.block-blk);tgt.hp=Math.max(0,tgt.hp-act);
+    logLine(state,`${e.name}->${tgt.name} ${inc}${blk?` (block ${blk})`:""}`);
+    if(act>0)addStress(state,null,3);
+    const msg=`${e.name} ⚔ ${tgt.name}  ${act} dmg${blk?` (${blk} blocked)`:""}`;
+    if(tgt.hp<=0){logLine(state,`✖ ${tgt.name} down!`);addStress(state,null,30);}
+    return msg;
+  }
+  else if(e.intent.type==="defend"){e.block+=e.intent.value;logLine(state,`${e.name} Block +${e.intent.value}`);return `${e.name} 🛡 +${e.intent.value}`;}
+  else if(e.intent.type==="buff"){e.attackBonus+=e.intent.value;logLine(state,`${e.name} Buff +${e.intent.value}`);return `${e.name} ↑ +${e.intent.value}`;}
+  return"";
 }
 function advanceIntent(e){e.intentIndex=(e.intentIndex+1)%e.pattern.length;e.intent=e.pattern[e.intentIndex];}
 
-function handleWin(){const cb=state.combat;if(!cb)return;if(cb.isBoss){logLine(state,`★ ${cb.enemies[0].name} defeated!`);playCutscene(`boss_defeat_floor_${state.run.floor}`,()=>{state.floor.completedNodeIds.add(state.floor.bossNode.id);if(state.run.floor===5){const et=evalEnd(true);playCutscene(endSceneId(et),()=>moveEnd(et));}else{state.phase=PHASE.FLOOR_REWARD;state.combat=null;renderAll();}});return;}state.phase=PHASE.BATTLE_REWARD;state.rewardChoices=uniqueSample(CARD_REWARD_POOL,3);renderAll();}
+function handleWin(){
+  const cb=state.combat;if(!cb)return;
+  if(cb.isBoss){
+    const floorRef=state.floor, runFloor=state.run.floor;
+    logLine(state,`★ ${cb.enemies[0].name} defeated!`);
+    playCutscene(`boss_defeat_floor_${runFloor}`,()=>{
+      if(floorRef&&floorRef.bossNode) floorRef.completedNodeIds.add(floorRef.bossNode.id);
+      if(runFloor===5){const et=evalEnd(true);playCutscene(endSceneId(et),()=>moveEnd(et));}
+      else{state.phase=PHASE.FLOOR_REWARD;state.combat=null;renderAll();}
+    });
+    return;
+  }
+  state.phase=PHASE.BATTLE_REWARD;state.rewardChoices=uniqueSample(CARD_REWARD_POOL,3);renderAll();
+}
 function completeNode(nd){if(!nd||!state.floor)return;state.floor.completedNodeIds.add(nd.id);state.phase=PHASE.MAP;state.combat=null;state.eventContext=null;state.rewardChoices=[];state.pendingRewardCard=null;state.turnOrder=[];state.waitingForAlly=false;renderAll();}
 function proceedFloor(){if(state.run.floor>=5)return;const n=state.run.floor+1;logLine(state,`${state.run.floor}Floor→${n}Floor`);loadFloor(n);}
 function evalEnd(c){if(!c||!aliveParty(state).length)return"ENDING_FAIL";if(state.run.collapsedNames.length)return"ENDING_FAIL";if(state.run.consumedFoodCount===0)return"ENDING_TRUE";return"ENDING_LOOP";}
@@ -811,9 +933,24 @@ function moveEnd(et){state.phase=PHASE.ENDING;state.combat=null;state.turnOrder=
 function handleFail(r){logLine(state,r);const et=evalEnd(false);playCutscene(endSceneId(et),()=>moveEnd(et));}
 
 /* ── Cutscenes ───────────────────────────────── */
-function playCutscene(id,onEnd){const sc=CUTSCENES[id];if(!sc){onEnd?.();return;}state.phase=PHASE.CUTSCENE;state.activeScene=sc;state.activeSceneIndex=0;state.activeSceneOnEnd=onEnd||null;state.eventContext=null;state.combat=null;renderAll();}
+let cutsceneTimer=null;
+function playCutscene(id,onEnd){
+  if(!CUTSCENES) CUTSCENES=buildCutscenes();
+  const sc=CUTSCENES[id];if(!sc){onEnd?.();return;}
+  state.phase=PHASE.CUTSCENE;state.activeScene=sc;state.activeSceneIndex=0;state.activeSceneOnEnd=onEnd||null;state.eventContext=null;state.combat=null;
+  renderAll();startCutsceneAuto();
+}
+function startCutsceneAuto(){
+  if(cutsceneTimer) clearInterval(cutsceneTimer);
+  cutsceneTimer=setInterval(()=>{
+    if(!state.activeScene){clearInterval(cutsceneTimer);cutsceneTimer=null;return;}
+    state.activeSceneIndex++;
+    if(state.activeSceneIndex>=state.activeScene.frames.length){clearInterval(cutsceneTimer);cutsceneTimer=null;finishScene();}
+    else renderAll();
+  },2500);
+}
 function nextFrame(){if(!state.activeScene)return;state.activeSceneIndex++;if(state.activeSceneIndex>=state.activeScene.frames.length)finishScene();else renderAll();}
-function skipScene(){finishScene();}
+function skipScene(){if(cutsceneTimer){clearInterval(cutsceneTimer);cutsceneTimer=null;}finishScene();}
 function finishScene(){const cb=state.activeSceneOnEnd;state.activeScene=null;state.activeSceneIndex=0;state.activeSceneOnEnd=null;if(cb)cb();else{state.phase=PHASE.MAP;renderAll();}}
 
 /* ══════════════════════════════════════════════════
@@ -841,107 +978,200 @@ function drawMap(){
   drawBg(bgMap);
   const fl=state.floor, s=fl.size;
   const adjIds=new Set(getAdj(fl).map(n=>n.id));
-  const disc=state.run.discoveredPersistent, discR=state.run.discoveredRun;
 
-  drawText(`${state.run.floor}Floor — ${FLOOR_NAMES[state.run.floor-1]}`,480,32,22,"#f5f9ff","center");
+  drawTextOutline(`Floor ${state.run.floor} — ${FLOOR_NAMES[state.run.floor-1]}`,480,30,20,"#f5f9ff","#000",2,"center");
 
-  const gridArea=Math.min(420, 480);
+  const gridArea=Math.min(420,480);
   const cellSize=Math.floor(gridArea/s);
-  const ox=480-cellSize*s/2, oy=60;
-  const nodeR=Math.max(10, Math.min(16, Math.floor(cellSize*0.32)));
+  const ox=480-cellSize*s/2, oy=55;
+  const nodeSize=Math.max(44,Math.min(68,Math.floor(cellSize*0.92)));
 
   for(let r=0;r<s;r++){
     for(let c=0;c<s;c++){
       const nd=fl.grid[r][c];
       const cx=ox+c*cellSize+cellSize/2, cy=oy+r*cellSize+cellSize/2;
 
-      if(c<s-1) drawLine(cx+nodeR,cy,cx+cellSize-nodeR,cy,"rgba(255,255,255,0.08)",1);
-      if(r<s-1) drawLine(cx,cy+nodeR,cx,cy+cellSize-nodeR,"rgba(255,255,255,0.08)",1);
+      if(c<s-1) drawLine(cx+nodeSize/2,cy,cx+cellSize-nodeSize/2,cy,"rgba(255,255,255,0.12)",1.5);
+      if(r<s-1) drawLine(cx,cy+nodeSize/2,cx,cy+cellSize-nodeSize/2,"rgba(255,255,255,0.12)",1.5);
 
       const isCur=fl.currentPos.row===r&&fl.currentPos.col===c;
       const isAdj=adjIds.has(nd.id);
       const done=fl.completedNodeIds.has(nd.id);
-      const visited=fl.visitedNodeIds.has(nd.id);
       const prevInfo=getNodeVisitInfo(nd.id);
-      const revealed=visited||!!prevInfo||isAdj;
+      const revealed=fl.visitedNodeIds.has(nd.id)||!!prevInfo||isAdj;
 
-      let color;
-      if(isCur) color="#ffc857";
-      else if(done) color="#50c878";
-      else if(isAdj) color="#88bbdd";
-      else if(prevInfo) color="#6890b0";
-      else if(visited) color="#556677";
-      else color="#2a3646";
+      ctx.save();
+      if(nodeBasicImg.complete&&nodeBasicImg.naturalWidth>0){
+        ctx.drawImage(nodeBasicImg,cx-nodeSize/2,cy-nodeSize/2,nodeSize,nodeSize);
+      }
+      const overlaySize=nodeSize*0.9;
+      if(nd.type==="boss"&&nodeBossImg.complete&&nodeBossImg.naturalWidth>0){
+        ctx.drawImage(nodeBossImg,cx-overlaySize/2,cy-overlaySize/2,overlaySize,overlaySize);
+      } else if(nd.type==="choice"&&revealed&&nodeEventImg.complete&&nodeEventImg.naturalWidth>0){
+        ctx.drawImage(nodeEventImg,cx-overlaySize/2,cy-overlaySize/2,overlaySize,overlaySize);
+      }
+      ctx.restore();
 
-      drawCircle(cx,cy,nodeR,color);
-
-      if(isCur){
-        ctx.strokeStyle="#ffc857";ctx.lineWidth=2;
-        ctx.beginPath();ctx.arc(cx,cy,nodeR+3,0,Math.PI*2);ctx.stroke();
+      if(isCur&&iconArrowDown.complete&&iconArrowDown.naturalWidth>0){
+        const aw=nodeSize*0.6,ah=aw;
+        ctx.drawImage(iconArrowDown,cx-aw/2,cy-nodeSize/2-ah-2,aw,ah);
       }
 
-      if(nd.type==="boss"){
-        drawText("BOSS",cx,cy+1,nodeR>12?10:8,"#ffdede","center");
-      } else if(revealed){
-        const icon=nd.type==="battle"?"⚔":"◈";
-        drawText(icon,cx,cy+1,nodeR>12?12:9,"#fff","center");
-        if(prevInfo&&prevInfo.enemyCount&&nd.type==="battle"){
-          drawText(`${prevInfo.enemyCount}`,cx+nodeR-2,cy-nodeR+4,8,"#ff8888","center");
-        }
-      } else {
-        drawText("?",cx,cy+1,nodeR>12?11:8,"#6a7888","center");
+      if(prevInfo&&nd.type==="battle"&&!isCur){
+        drawTextOutline(`${prevInfo.enemyCount}⚔`,cx,cy+nodeSize/2+10,8,"#ff8888","#000",1,"center");
+      }
+      if(prevInfo&&nd.type==="choice"&&!isCur){
+        drawTextOutline("Event",cx,cy+nodeSize/2+10,7,"#89f6d9","#000",1,"center");
       }
     }
   }
-
-  const legend=`Current=Yellow | Cleared=Green | Adjacent=Sky | Memory=Blue | Unknown=Gray`;
-  drawText(legend,480,oy+s*cellSize+16,10,"#6a7888","center");
 }
 
 function drawCombat(){
   const run=state.run,cb=state.combat;if(!run)return;
   drawBg(getCombatBg());
-  run.party.forEach((m,i)=>{const x=60,y=120+i*100,act=isActive(m),a=act?0.7:0.3;const isActing=state.actingMember===m;
-    drawPanel(x,y,240,85,isActing?"rgba(40,80,140,0.8)":`rgba(12,22,40,${a})`);
-    if(isActing){ctx.strokeStyle="#5da4e6";ctx.lineWidth=2;ctx.strokeRect(x,y,240,85);}
-    drawText(m.name,x+10,y+18,16,act?"#8bc1ff":"#556677","left");
-    if(state.diceRolling.active && act) {
-      const key=`ally_${i}`, fs=state.diceRolling.finalSpeeds;
-      if(state.diceRolling.settled) { drawText(`🎲 ${fs.get(key)}`,x+170,y+18,14,"#ffc857","left"); }
-      else { drawText(`🎲 ${randomInt(1,6)}`,x+170,y+18,14,"rgba(255,255,255,0.6)","left"); }
-    } else if(m.speed>0) { drawText(`SPD ${m.speed}`,x+180,y+18,11,"#88aacc","left"); }
-    const hp=m.maxHp>0?m.hp/m.maxHp:0,hc=hp>0.5?"#50c878":hp>0.25?"#e6b84d":"#ff4d4d";drawBarBg(x+10,y+36,160,8);drawBarFill(x+10,y+36,160*hp,8,hc);drawText(`${m.hp}/${m.maxHp}`,x+178,y+40,11,"#dde8f2","left");
-    const sp=Math.min(m.stress,100)/100,sc=m.stress<=30?"#50c878":m.stress<=60?"#e6b84d":m.stress<=STRESS_LIMIT?"#d46ab0":"#ff4d4d";drawBarBg(x+10,y+52,100,6);drawBarFill(x+10,y+52,100*sp,6,sc);drawText(`ST ${m.stress}`,x+118,y+55,10,"#aabbcc","left");
-    if(m.block>0)drawText(`🛡${m.block}`,x+175,y+55,10,"#5da4e6","left");if(!act)drawText(m.stress>STRESS_LIMIT?"Collapsed":"Dead",x+10,y+72,12,"#ff6666","left");});
+  const charW=150, charH=280, charGap=-10, partyStartX=10;
+  const partyCy=420;
+  const commonArkeH=charH*(charSprites.Arke.scale||1);
+  const commonBarY=partyCy+4;
+  run.party.forEach((m,i)=>{
+    const cx=partyStartX+i*(charW+charGap), cy=partyCy;
+    const act=isActive(m), isActing=state.actingMember===m;
+    if(!act) return;
 
-  if(cb){cb.enemies.forEach((e,i)=>{const x=620,y=120+i*100,alive=e.hp>0;const hl=highlightedEnemy===i;
-    drawPanel(x,y,280,85,hl?"rgba(120,40,40,0.9)":`rgba(40,16,18,${alive?0.72:0.25})`);
-    if(hl){ctx.strokeStyle="#ff6b6b";ctx.lineWidth=2;ctx.strokeRect(x,y,280,85);}
-    drawText(e.name,x+10,y+18,15,alive?"#ffb7b7":"#776666","left");
-    if(state.diceRolling.active && alive) {
-      const key=`enemy_${i}`, fs=state.diceRolling.finalSpeeds;
-      if(state.diceRolling.settled) { drawText(`🎲 ${fs.get(key)}`,x+210,y+18,14,"#ffc857","left"); }
-      else { drawText(`🎲 ${randomInt(1,6)}`,x+210,y+18,14,"rgba(255,255,255,0.6)","left"); }
-    } else if(e.speed>0) { drawText(`SPD ${e.speed}`,x+210,y+18,11,"#cc8888","left"); }
-    const hp=e.maxHp>0?e.hp/e.maxHp:0;drawBarBg(x+10,y+36,160,8);drawBarFill(x+10,y+36,160*hp,8,hp>0.5?"#e08888":"#ff4444");drawText(`${e.hp}/${e.maxHp}`,x+178,y+40,11,"#f0dede","left");
-    if(alive)drawText(`Intent: ${intentLbl(e.intent)}`,x+10,y+56,12,"#eeddcc","left");else drawText("Defeated",x+10,y+56,12,"#884444","left");
-    if(e.bleed>0)drawText(`🩸${e.bleed}`,x+10,y+72,10,"#cc6666","left");});
-    drawText("VS",480,240,36,"rgba(255,255,255,0.1)","center");
+    ctx.save();
+    const spr=charSprites[m.name]||charSprites.Arke;
+    if(spr.img.complete&&spr.img.naturalWidth>0){
+      const frameIdx=spr.seq[spriteFrame%spr.seq.length];
+      const sx=frameIdx*spr.fw, sy=0;
+      const ratio=spr.fw/spr.fh;
+      const drawH=charH*(spr.scale||1);
+      const drawW=drawH*ratio;
+      const drawX=cx+(charW-drawW)/2;
+      const yOff=spr.yOffset||0;
+      ctx.drawImage(spr.img,sx,sy,spr.fw,spr.fh,drawX,cy-drawH+yOff,drawW,drawH);
+    } else {
+      drawPanel(cx,cy-charH,charW,charH,`rgba(12,22,40,0.7)`);
+    }
+    ctx.restore();
 
-    if(state.turnOrder.length){let ty=440;drawText(`Turn ${cb.roundNumber} Turn Order:`,340,ty,12,"#8a9bb0","left");
-      state.turnOrder.forEach((u,idx)=>{const isCur=idx===state.currentActionIdx;const nm=u.type==="ally"?state.run.party[u.index].name:cb.enemies[u.index].name;const done=idx<state.currentActionIdx;
-        const col=done?"#555":isCur?"#ffc857":u.type==="ally"?"#88bbdd":"#cc8888";
-        drawText(`${idx+1}.${nm}(${u.speed})`,340+idx*90,ty+18,10,col,"left");});}
+    const arkeSpr=charSprites.Arke;
+    const arkeRatio=arkeSpr.fw/arkeSpr.fh;
+    const arkeH=charH*(arkeSpr.scale||1);
+    const arkeW=arkeH*arkeRatio;
+    const boxX=cx+(charW-arkeW)/2;
+    const boxY=cy-arkeH;
+
+    if(isActing){
+      const arrowX=cx+charW/2, arrowY=boxY-28;
+      drawText("▼",arrowX,arrowY,18,"#ffc857","center");
+    }
+
+    drawTextOutline(m.name,cx+charW/2,boxY-18,11,act?"#ffc857":"#888","#000",2,"center");
+
+    const barW=charW, barH=Math.round(charW/2.7), barX=cx, barY=cy+4;
+    const hpPct=m.maxHp>0?m.hp/m.maxHp:0;
+    const hpColor=hpPct>0.5?"#50c878":hpPct>0.25?"#e6b84d":"#ff4d4d";
+    const padX=Math.round(barW*0.08), padY=Math.round(barH*0.35);
+    const fillX=barX+padX, fillY=barY+padY, fillMaxW=barW-padX*2, fillH=barH-padY*2;
+    ctx.fillStyle="rgba(20,10,10,0.8)";
+    ctx.beginPath();ctx.roundRect(fillX,fillY,fillMaxW,fillH,2);ctx.fill();
+    ctx.fillStyle=hpColor;
+    if(fillMaxW*hpPct>0){ctx.beginPath();ctx.roundRect(fillX,fillY,fillMaxW*hpPct,fillH,2);ctx.fill();}
+    if(hpBarFrame.complete&&hpBarFrame.naturalWidth>0){
+      ctx.drawImage(hpBarFrame,barX,barY,barW,barH);
+    }
+    drawTextOutline(`${m.hp}/${m.maxHp}`,cx+charW/2,barY+barH/2,9,"#fff","#000",2,"center");
+
+    const spdY=barY+barH+2;
+    if(state.diceRolling.active&&act){
+      const key=`ally_${i}`,fs=state.diceRolling.finalSpeeds;
+      if(state.diceRolling.settled) drawTextOutline(`🎲${fs.get(key)}`,cx+charW/2,spdY,12,"#ffc857","#000",2,"center");
+      else drawTextOutline(`🎲${randomInt(1,6)}`,cx+charW/2,spdY,12,"#ccc","#000",2,"center");
+    } else if(act&&m.speed>0) {
+      drawTextOutline(`SPD ${m.speed}`,cx+charW/2,spdY,10,"#88aacc","#000",2,"center");
+    }
+
+    if(m.block>0) drawTextOutline(`🛡${m.block}`,cx+charW/2+30,spdY,10,"#5da4e6","#000",2,"left");
+    if(!act) drawText(m.stress>STRESS_LIMIT?"💀":"☠",cx+charW/2,cy-charH/2,24,"#ff6666","center");
+  });
+
+  if(cb){
+    const enW=150, enH=480, enStartX=500, enGap=-10;
+    cb.enemies.forEach((e,i)=>{
+      const ex=enStartX+i*(enW+enGap), ey=570;
+      const alive=e.hp>0, hl=highlightedEnemy===i;
+      if(!alive) return;
+
+      ctx.save();
+      if(enemySprite.complete&&enemySprite.naturalWidth>0){
+        const frameIdx=ENEMY_SPRITE.seq[spriteFrame%ENEMY_SPRITE.seq.length];
+        const sx=frameIdx*ENEMY_SPRITE.fw, sy=0;
+        const ratio=ENEMY_SPRITE.fw/ENEMY_SPRITE.fh;
+        const drawH=enH, drawW=drawH*ratio;
+        const drawX=ex+(enW-drawW)/2;
+        ctx.save();
+        ctx.translate(drawX+drawW,ey-drawH);
+        ctx.scale(-1,1);
+        ctx.drawImage(enemySprite,sx,sy,ENEMY_SPRITE.fw,ENEMY_SPRITE.fh,0,0,drawW,drawH);
+        ctx.restore();
+      } else {
+        drawPanel(ex,ey-enH,enW,enH,`rgba(40,16,18,0.7)`);
+      }
+      ctx.restore();
+
+      const eNameY=partyCy-commonArkeH-18;
+      if(hl){
+        drawText("▼",ex+enW/2,eNameY-20,18,"#ff6b6b","center");
+      }
+
+      drawTextOutline(e.name,ex+enW/2,eNameY,11,"#ffb7b7","#000",2,"center");
+
+      const eBarW=charW, eBarH=Math.round(charW/2.7), eBarX=ex+(enW-charW)/2, eBarY=commonBarY;
+      const ePadX=Math.round(eBarW*0.08), ePadY=Math.round(eBarH*0.35);
+      const eFillX=eBarX+ePadX, eFillY=eBarY+ePadY, eFillMaxW=eBarW-ePadX*2, eFillH=eBarH-ePadY*2;
+      ctx.fillStyle="rgba(20,10,10,0.8)";
+      ctx.beginPath();ctx.roundRect(eFillX,eFillY,eFillMaxW,eFillH,2);ctx.fill();
+      const eHpPct=e.maxHp>0?e.hp/e.maxHp:0;
+      const eHpCol=eHpPct>0.5?"#cc4444":"#ff2222";
+      if(eFillMaxW*eHpPct>0){ctx.fillStyle=eHpCol;ctx.beginPath();ctx.roundRect(eFillX,eFillY,eFillMaxW*eHpPct,eFillH,2);ctx.fill();}
+      if(hpBarFrame.complete&&hpBarFrame.naturalWidth>0) ctx.drawImage(hpBarFrame,eBarX,eBarY,eBarW,eBarH);
+      drawTextOutline(`${e.hp}/${e.maxHp}`,eBarX+eBarW/2,eBarY+eBarH/2,9,"#fff","#000",2,"center");
+
+      const eSpdY=eBarY+eBarH+4;
+      if(state.diceRolling.active&&alive){
+        const key=`enemy_${i}`,fs=state.diceRolling.finalSpeeds;
+        if(state.diceRolling.settled) drawTextOutline(`🎲${fs.get(key)}`,ex+enW/2,eSpdY,11,"#ffc857","#000",2,"center");
+        else drawTextOutline(`🎲${randomInt(1,6)}`,ex+enW/2,eSpdY,11,"#ccc","#000",2,"center");
+      } else if(alive&&e.speed>0) { drawTextOutline(`SPD ${e.speed}`,ex+enW/2,eSpdY,9,"#cc8888","#000",2,"center"); }
+
+      if(e.block>0) drawTextOutline(`🛡${e.block}`,ex+enW/2,eSpdY+14,10,"#5da4e6","#000",2,"center");
+      if(e.bleed>0) drawTextOutline(`🩸${e.bleed}`,ex+enW/2,eSpdY+26,10,"#cc6666","#000",2,"center");
+    });
+
 
     if(state.enemyActing){
-      drawPanel(200,16,560,44,"rgba(60,20,20,0.92)");
-      drawText(state.enemyActing.preview,480,38,18,"#ff9988","center");
+      const lw=500,lh=Math.round(lw/5.3),lx=480-lw/2,ly=10;
+      if(combatLogBg.complete&&combatLogBg.naturalWidth>0) ctx.drawImage(combatLogBg,lx,ly,lw,lh);
+      drawTextOutline(state.enemyActing.preview,480,ly+lh/2,14,"#ff9988","#000",2,"center");
     }}
 }
 
 function drawEvent(){if(!state.eventContext)return;const evIdx=EVENT_VARIANTS.indexOf(state.eventContext.variant);drawBg(bgEvent[evIdx>=0?evIdx%bgEvent.length:0]);const v=state.eventContext.variant;drawPanel(180,120,600,200,"rgba(14,29,33,0.75)");drawText(v.title,210,170,30,"#89f6d9","left");drawText(v.text,210,220,18,"#e0f0ff","left");}
-function drawFloorRw(){drawBg(bgFloorBoss[state.run?.floor]||bgFloorBoss[1]);drawPanel(220,140,520,200,"rgba(39,28,12,0.76)");drawText(`Floor ${state.run.floor} Cleared`,480,200,34,"#f6cd89","center");drawText("Choose Reward",480,260,18,"#e8e0d0","center");}
-function drawCutscene(){const sc=state.activeScene;if(!sc)return;const fr=sc.frames[Math.min(state.activeSceneIndex,sc.frames.length-1)];const[r,g2,b]=fr.color;ctx.fillStyle=`rgba(${r},${g2},${b},0.3)`;ctx.fillRect(0,0,960,540);drawPanel(80,100,800,180,"rgba(0,0,0,0.5)");drawPanel(80,310,800,120,"rgba(0,0,0,0.6)");drawText(sc.title,110,150,28,"#f8eac1","left");drawText(fr.headline,110,200,22,"#ffffff","left");drawText(fr.line,110,370,20,"#f4f7fb","left");}
+function drawFloorRw(){drawBg(bgFloorBoss[state.run?.floor]||bgFloorBoss[1]);drawTextOutline(`Floor ${state.run.floor} Cleared`,480,200,36,"#f6cd89","#000",4,"center");drawTextOutline("Choose Reward",480,260,20,"#e8e0d0","#000",2,"center");}
+function drawCutscene(){
+  const sc=state.activeScene;if(!sc)return;
+  const fr=sc.frames[Math.min(state.activeSceneIndex,sc.frames.length-1)];
+  if(fr.bg) drawBg(fr.bg);
+  else { const[r,g2,b]=fr.color;ctx.fillStyle=`rgba(${r},${g2},${b},0.3)`;ctx.fillRect(0,0,960,540); }
+  drawTextOutline(fr.headline,480,340,28,"#f8eac1","#000",3,"center");
+  drawTextOutline(fr.line,480,390,18,"#f4f7fb","#000",2,"center");
+}
+function drawTextOutline(t,x,y,s,fill,stroke,w,a="left"){
+  ctx.font=`bold ${s}px 'New Rocker',Almendra,serif`;ctx.textAlign=a;ctx.textBaseline="middle";
+  ctx.strokeStyle=stroke;ctx.lineWidth=w;ctx.lineJoin="round";ctx.strokeText(t,x,y);
+  ctx.fillStyle=fill;ctx.fillText(t,x,y);
+}
 function drawEnding(){
   const et=evalEnd(state.run.floor>=5&&aliveParty(state).length>0);
   if(et==="ENDING_TRUE") drawBg(bgEndTrue);
@@ -949,16 +1179,16 @@ function drawEnding(){
   else drawBg(bgEndFail);
   const t=et==="ENDING_TRUE"?"True Ending":et==="ENDING_LOOP"?"Normal Ending":"Failure Ending";
   const tc=et==="ENDING_TRUE"?"#50c878":et==="ENDING_LOOP"?"#f6d18d":"#ff6b6b";
-  drawPanel(200,80,560,380,"rgba(10,14,25,0.65)");
-  drawText(t,480,140,36,tc,"center");
-  drawText(`Binding: ${state.run.consumedFoodCount}`,480,210,20,"#e0e8f0","center");
-  drawText(`Gold: ${state.run.gold}`,480,245,20,"#e0e8f0","center");
-  let y=300;state.run.party.forEach(m=>{const st=isActive(m)?"Active":m.stress>STRESS_LIMIT?"Collapsed":"Dead";
-    drawText(`${m.name}: HP ${m.hp}/${m.maxHp} ST ${m.stress} [${st}]`,480,y,13,isActive(m)?"#88ccaa":"#cc6666","center");y+=20;});
+  drawTextOutline(t,480,200,40,tc,"#000",4,"center");
+  drawTextOutline(`Binding: ${state.run.consumedFoodCount}`,480,280,18,"#e0e8f0","#000",2,"center");
+  drawTextOutline(`Gold: ${state.run.gold}`,480,310,18,"#e0e8f0","#000",2,"center");
+  let y=370;state.run.party.forEach(m=>{const st=isActive(m)?"Active":m.stress>STRESS_LIMIT?"Collapsed":"Dead";
+    drawTextOutline(`${m.name}: HP ${m.hp}/${m.maxHp} ST ${m.stress} [${st}]`,480,y,14,isActive(m)?"#88ccaa":"#cc6666","#000",2,"center");y+=24;});
 }
 
 /* ── Draw primitives ─────────────────────────── */
-function drawText(t,x,y,s,c,a="left"){ctx.fillStyle=c;ctx.font=`${s}px Pretendard,Apple SD Gothic Neo,sans-serif`;ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y);}
+function drawText(t,x,y,s,c,a="left"){ctx.fillStyle=c;ctx.font=`${s}px Almendra,Pretendard,serif`;ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y);}
+function drawTitle2(t,x,y,s,c,a="left"){ctx.fillStyle=c;ctx.font=`${s}px 'New Rocker',Almendra,serif`;ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y);}
 function drawPanel(x,y,w,h,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,6);ctx.fill();ctx.strokeStyle="rgba(255,255,255,0.12)";ctx.lineWidth=1;ctx.stroke();}
 function drawCircle(x,y,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle="rgba(255,255,255,0.3)";ctx.lineWidth=1.2;ctx.stroke();}
 function drawLine(x1,y1,x2,y2,c,w){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
@@ -982,42 +1212,43 @@ function buildCutscenes(){
   const sc={};
   for(let fl=1;fl<=5;fl++){
     const c=FLOOR_COLORS[fl-1];
+    const bossBg=bgFloorBoss[fl]||bgFloorBoss[1];
     sc[`boss_intro_floor_${fl}`]={
       title:`Floor ${fl} Boss Entry`,
       frames:[
-        {headline:`${BOSS_NAMES[fl-1]} Appears`,line:`The gate of Floor ${fl} opens.`,color:c},
-        {headline:"Prepare for Final Battle",line:"Steady your breath.",color:c},
-        {headline:"Battle Start",line:"The boss reveals intent.",color:c},
+        {headline:`${BOSS_NAMES[fl-1]} Appears`,line:`The gate of Floor ${fl} opens.`,color:c,bg:bossBg},
+        {headline:"Prepare for Final Battle",line:"Steady your breath.",color:c,bg:bossBg},
+        {headline:"Battle Start",line:"The boss reveals intent.",color:c,bg:bossBg},
       ],
     };
     sc[`boss_defeat_floor_${fl}`]={
       title:`Floor ${fl} Cleared`,
       frames:[
-        {headline:`${BOSS_NAMES[fl-1]} Collapsed`,line:"The path opens.",color:c},
-        {headline:"Spoils",line:"You find a clue.",color:c},
+        {headline:`${BOSS_NAMES[fl-1]} Collapsed`,line:"The path opens.",color:c,bg:bossBg},
+        {headline:"Spoils",line:"You find a clue.",color:c,bg:bossBg},
       ],
     };
   }
   sc.ending_loop_cutscene={
     title:"Normal Clear",
     frames:[
-      {headline:"The Gate Opened",line:"The binding sigil drags you back.",color:[84,77,52]},
-      {headline:"Fall",line:"Back to the cell.",color:[48,55,74]},
+      {headline:"The Gate Opened",line:"The binding sigil drags you back.",color:[84,77,52],bg:bgEndStress},
+      {headline:"Fall",line:"Back to the cell.",color:[48,55,74],bg:bgEndStress},
     ],
   };
   sc.ending_true_cutscene={
     title:"True Ending",
     frames:[
-      {headline:"Unbound",line:"The fasting vow takes effect.",color:[93,130,94]},
-      {headline:"Escape to the Surface",line:"You breathe the dawn air.",color:[124,150,110]},
-      {headline:"Epilogue",line:"The loop is over.",color:[148,164,127]},
+      {headline:"Unbound",line:"The fasting vow takes effect.",color:[93,130,94],bg:bgEndTrue},
+      {headline:"Escape to the Surface",line:"You breathe the dawn air.",color:[124,150,110],bg:bgEndTrue},
+      {headline:"Epilogue",line:"The loop is over.",color:[148,164,127],bg:bgEndTrue},
     ],
   };
   sc.ending_fail_cutscene={
     title:"Failure",
     frames:[
-      {headline:"Will Collapsed",line:"Erased.",color:[114,54,58]},
-      {headline:"Reboot",line:"Brand reset.",color:[62,47,74]},
+      {headline:"Will Collapsed",line:"Erased.",color:[114,54,58],bg:bgEndFail},
+      {headline:"Reboot",line:"Brand reset.",color:[62,47,74],bg:bgEndFail},
     ],
   };
   return sc;
